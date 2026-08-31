@@ -141,12 +141,15 @@ cd sql_monitor
 .venv\Scripts\activate
 pip install -r requirements.txt
 pip install -r requirements-build.txt
-build.bat
+.\build.bat
 ```
 
-(`build.bat` chama o `pyinstaller` com as opções corretas — inclui os
-templates HTML e os módulos do APScheduler que o PyInstaller não deteta
-sozinho.) No fim, o executável fica em `dist\SQLMonitor.exe`.
+(No PowerShell é preciso o `.\` à frente do nome do script — sem isso dá
+erro "not recognized", porque por segurança o PowerShell não corre
+comandos da pasta atual sem indicares explicitamente o caminho.
+`build.bat` chama o `pyinstaller` com as opções corretas — inclui os
+templates HTML, o ícone e os módulos do APScheduler que o PyInstaller
+não deteta sozinho.) No fim, o executável fica em `dist\SQLMonitor.exe`.
 
 **No PC/servidor do cliente:**
 
