@@ -5,6 +5,7 @@ REM (requirements.txt + requirements-build.txt). Ver README.md, secção
 REM "Compilar para .exe", para o passo a passo completo.
 
 pyinstaller --noconfirm --onefile --name SQLMonitor ^
+  --icon "assets\sqlmonitor.ico" ^
   --add-data "app\templates;app\templates" ^
   --hidden-import apscheduler.triggers.interval ^
   --hidden-import apscheduler.triggers.date ^
