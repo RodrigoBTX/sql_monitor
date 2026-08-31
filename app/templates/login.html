@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Login - SQL Monitor{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card shadow-sm"
+        style="width: 100%; max-width: 400px; border-color: var(--border); border-radius: .85rem;">
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <div class="tile-icon mx-auto mb-2"
+                    style="background: var(--ok-bg); color: var(--brand); width: 56px; height: 56px; font-size: 1.5rem;">
+                    <i class="bi bi-hdd-network"></i>
+                </div>
+                <h4 class="mt-2 mb-0">SQL Monitor</h4>
+                {% if first_run %}
+                <small class="text-muted">Cria a conta de administrador</small>
+                {% else %}
+                <small class="text-muted">Inicia sessão para continuar</small>
+                {% endif %}
+            </div>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label">Utilizador</label>
+                    <input type="text" name="username" class="form-control" required autofocus>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" name="password" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">
+                    {% if first_run %}Criar conta{% else %}Entrar{% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

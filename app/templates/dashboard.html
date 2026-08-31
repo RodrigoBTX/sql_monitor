@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - SQL Monitor{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="mb-0">Estado da instância</h4>
+        {% if conn %}
+        <small class="text-muted">{{ active_profile.name }} — {{ conn.server }}</small>
+        {% endif %}
+    </div>
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-clockwise"></i> Atualizar
+    </a>
+</div>
+
+{% if not conn %}
+<div class="alert alert-warning">
+    Ainda não configuraste a ligação à instância SQL Server.
+    <a href="{{ url_for('settings.setup') }}" class="alert-link">Configurar agora</a>.
+</div>
+{% elif summary.error %}
+<div class="alert alert-danger">
+    <strong>Não foi possível ligar à instância:</strong> {{ summary.error }}
+    <br><a href="{{ url_for('settings.setup') }}" class="alert-link">Rever definições de ligação</a>.
+</div>
+{% else %}
+{% set total_problems = summary.jobs_failed + summary.jobs_stuck + summary.sessions_blocked
++ summary.queries_long_running + summary.backups_stale + summary.disk_low + summary.custom_checks_breached %}
+
+{% if total_problems == 0 %}
+<div class="alert alert-success d-flex align-items-center gap-2">
+    <i class="bi bi-check-circle-fill fs-5"></i>
+    <div><strong>Tudo bem por aqui.</strong> Nenhum alerta ativo neste momento.</div>
+</div>
+{% else %}
+<div class="alert alert-danger d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+    <div><strong>{{ total_problems }} situaç{{ "ão" if total_problems == 1 else "ões" }} a precisar de atenção.</strong>
+        Vê o detalhe nos cartões abaixo.</div>
+</div>
+{% endif %}
+
+<div class="section-label">Processos</div>
+<div class="row g-3">
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.jobs') }}" class="tile {{ 'tile-bad' if summary.jobs_failed else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-x-circle"></i></div>
+            <div>
+                <div class="tile-value">{{ summary.jobs_failed }}</div>
+                <div class="tile-label">Jobs com erro</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.jobs') }}" class="tile {{ 'tile-bad' if summary.jobs_stuck else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+                <div class="tile-value">{{ summary.jobs_stuck }}</div>
+                <div class="tile-label">Jobs pendurados</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.sessions') }}"
+            class="tile {{ 'tile-bad' if summary.sessions_blocked else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-lock"></i></div>
+            <div>
+                <div class="tile-value">{{ summary.sessions_blocked }}</div>
+                <div class="tile-label">Sessões bloqueadas</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.queries') }}"
+            class="tile {{ 'tile-bad' if summary.queries_long_running else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="tile-value">{{ summary.queries_long_running }}</div>
+                <div class="tile-label">Queries longas</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+</div>
+
+<div class="section-label">Manutenção</div>
+<div class="row g-3">
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.backups') }}"
+            class="tile {{ 'tile-bad' if summary.backups_stale else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-archive"></i></div>
+            <div>
+                <div class="tile-value">{{ summary.backups_stale }}</div>
+                <div class="tile-label">Backups desatualizados</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.capacity') }}" class="tile {{ 'tile-bad' if summary.disk_low else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-hdd"></i></div>
+            <div>
+                <div class="tile-value">{{ summary.disk_low }}</div>
+                <div class="tile-label">Volumes com pouco espaço</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+</div>
+
+<div class="section-label">Negócio</div>
+<div class="row g-3">
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('custom_checks.index') }}"
+            class="tile {{ 'tile-bad' if summary.custom_checks_breached else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-clipboard-check"></i></div>
+            <div>
+                <div class="tile-value">{{ summary.custom_checks_breached }}</div>
+                <div class="tile-label">Custom checks acima do limiar</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+</div>
+
+<div class="section-label">Mais</div>
+<div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('monitoring.query_store') }}" class="link-pill"><i class="bi bi-graph-up-arrow"></i> Query
+        Store</a>
+    <a href="{{ url_for('trends.index') }}" class="link-pill"><i class="bi bi-graph-up"></i> Tendências</a>
+    <a href="{{ url_for('monitoring.index_health') }}" class="link-pill"><i class="bi bi-diagram-3"></i> Índices</a>
+    <a href="{{ url_for('monitoring.deadlocks') }}" class="link-pill"><i class="bi bi-exclamation-octagon"></i>
+        Deadlocks</a>
+</div>
+{% endif %}
+{% endblock %}

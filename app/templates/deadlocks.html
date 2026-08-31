@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Deadlocks - SQL Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-exclamation-octagon"></i> Deadlocks recentes</div>
+        <div class="page-subtitle">Lidos da extended event <code>system_health</code>, que corre sempre por omissão (não
+            precisa de configuração extra). Só guarda um histórico limitado.</div>
+    </div>
+    {% if rows %}
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-export-table="deadlocksTable"
+        data-export-filename="deadlocks">
+        <i class="bi bi-download"></i> Exportar CSV
+    </button>
+    {% endif %}
+</div>
+
+{% if error %}
+<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% elif not rows %}
+<div class="empty-state state-ok"><i class="bi bi-check-circle"></i>Sem deadlocks registados recentemente.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="deadlocksTable">
+            <thead>
+                <tr>
+                    <th>Data/hora</th>
+                    <th>Processo vítima</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="row-bad">
+                    <td class="fw-semibold">{{ r.event_time }}</td>
+                    <td>{{ r.victim_process_id }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Jobs - SQL Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-calendar-check"></i> Jobs do SQL Agent</div>
+        <div class="page-subtitle">Estado da última execução de cada job, e se alguma está a correr há mais tempo que o
+            normal.</div>
+    </div>
+    {% if rows %}
+    <div class="d-flex align-items-center gap-2">
+        <span class="count-pill"><i class="bi bi-list-ul"></i> {{ rows|length }} job{{ "s" if rows|length != 1 }}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-export-table="jobsTable"
+            data-export-filename="jobs">
+            <i class="bi bi-download"></i> Exportar CSV
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+{% if error %}
+<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% elif not rows %}
+<div class="empty-state"><i class="bi bi-inboxes"></i>Sem jobs configurados ou sem ligação ativa.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="jobsTable">
+            <thead>
+                <tr>
+                    <th>Job</th>
+                    <th>Ativo</th>
+                    <th>Estado</th>
+                    <th>Últ. execução</th>
+                    <th>A correr há (min)</th>
+                    <th>Mensagem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="{{ 'row-bad' if r.run_status == 0 else ('row-warn' if r.is_stuck else '') }}">
+                    <td class="fw-semibold">{{ r.job_name }}</td>
+                    <td>{{ "Sim" if r.enabled else "Não" }}</td>
+                    <td>
+                        <span
+                            class="badge badge-status {{ 'bg-danger' if r.run_status == 0 else ('bg-success' if r.run_status == 1 else 'bg-secondary') }}">
+                            {{ r.last_status_label }}
+                        </span>
+                        {% if r.is_running %}<span class="badge bg-info text-dark">Em execução</span>{% endif %}
+                    </td>
+                    <td>{{ r.run_date }} {{ r.run_time }}</td>
+                    <td>{{ r.running_minutes if r.running_minutes is not none else "-" }}</td>
+                    <td class="text-truncate text-truncate-cell" title="{{ r.message }}">{{ r.message }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

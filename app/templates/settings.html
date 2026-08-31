@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Definições - SQL Monitor{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+
+        <div class="card shadow-sm mb-3" style="border-color: var(--border); border-radius: .85rem;">
+            <div class="card-body p-4">
+                <h5 class="mb-1"><i class="bi bi-hdd-stack text-primary"></i> Perfis</h5>
+                <p class="text-muted small mb-3">
+                    Cada perfil é uma instância SQL Server independente — a sua ligação, os seus Custom Checks,
+                    o seu histórico. Útil para monitorizares vários clientes/servidores sem misturar dados entre eles.
+                </p>
+
+                <div class="table-card mb-3">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Perfil</th>
+                                    <th style="width: 130px;">Histórico</th>
+                                    <th style="width: 220px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in all_profiles %}
+                                <tr class="{{ 'row-warn' if p.id == active_profile.id }}">
+                                    <td class="fw-semibold">
+                                        {{ p.name }}
+                                        {% if p.id == active_profile.id %}<span
+                                            class="badge bg-secondary fw-normal ms-1">a ver agora</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if p.is_snapshot_primary %}
+                                        <span class="text-warning"><i class="bi bi-star-fill"></i> Principal</span>
+                                        {% else %}
+                                        <form method="post"
+                                            action="{{ url_for('profiles.set_primary', profile_id=p.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-link p-0"
+                                                style="font-size: .8rem;">Tornar principal</button>
+                                        </form>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            {% if p.id != active_profile.id %}
+                                            <a href="{{ url_for('profiles.switch', profile_id=p.id) }}"
+                                                class="btn btn-sm btn-outline-secondary">Usar este</a>
+                                            {% endif %}
+                                            {% if all_profiles|length > 1 %}
+                                            <form method="post"
+                                                action="{{ url_for('profiles.delete', profile_id=p.id) }}"
+                                                data-confirm="Remover o perfil '{{ p.name }}'? Isto apaga também a ligação, os Custom Checks e o histórico dele.">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit"
+                                                    class="btn btn-sm btn-outline-danger">Remover</button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <form method="post" action="{{ url_for('profiles.new') }}" class="d-flex gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="name" class="form-control form-control-sm"
+                        placeholder="Nome do novo perfil (ex: Cliente B)" required>
+                    <button type="submit" class="btn btn-sm btn-primary text-nowrap"><i class="bi bi-plus-lg"></i> Novo
+                        perfil</button>
+                </form>
+                <p class="text-muted small mt-2 mb-0">
+                    <i class="bi bi-star-fill text-warning"></i> O perfil "Principal" é o único de onde o histórico
+                    (página Tendências) vai sendo gravado em segundo plano — para se manter leve, só um perfil de
+                    cada vez acumula esse histórico, mesmo que tenhas vários configurados.
+                </p>
+            </div>
+        </div>
+
+        <div class="card shadow-sm" style="border-color: var(--border); border-radius: .85rem;">
+            <div class="card-body p-4">
+                <h5 class="mb-1"><i class="bi bi-gear text-primary"></i> Ligação à instância SQL Server</h5>
+                <p class="text-muted small mb-4">
+                    A configurar o perfil <strong>{{ active_profile.name }}</strong>. Define os dados de ligação à
+                    instância que queres monitorizar. Usa de preferência um login só de leitura.
+                </p>
+
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Nome do perfil</label>
+                            <input type="text" name="name" class="form-control" value="{{ active_profile.name }}"
+                                placeholder="Ex: Produção" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Porta</label>
+                            <input type="number" name="port" class="form-control"
+                                value="{{ conn.port if conn else 1433 }}">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Servidor / Instância</label>
+                            <input type="text" name="server" class="form-control" required
+                                value="{{ conn.server if conn else '' }}" placeholder="Ex: SRV-SQL01\\SQLEXPRESS">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo de autenticação</label>
+                            <select name="auth_type" class="form-select" id="authType">
+                                <option value="sql" {% if conn and conn.auth_type=='sql' %}selected{% endif %}>SQL
+                                    Server</option>
+                                <option value="windows" {% if conn and conn.auth_type=='windows' %}selected{% endif %}>
+                                    Windows</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 sql-auth-field">
+                            <label class="form-label">Utilizador</label>
+                            <input type="text" name="username" class="form-control"
+                                value="{{ conn.username if conn else '' }}">
+                        </div>
+                        <div class="col-md-6 sql-auth-field">
+                            <label class="form-label">Password</label>
+                            <input type="password" name="password" class="form-control"
+                                placeholder="{% if conn and conn.password_encrypted %}(sem alterações){% endif %}">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Base de dados por omissão</label>
+                            <input type="text" name="default_database" class="form-control"
+                                value="{{ conn.default_database if conn else 'master' }}">
+                            <div class="form-text">Usada como referência quando uma query não especificar a BD.</div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="trust_server_certificate" id="tsc"
+                                    {% if not conn or conn.trust_server_certificate %}checked{% endif %}>
+                                <label class="form-check-label" for="tsc">Confiar no certificado do servidor</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Driver ODBC</label>
+                            <input type="text" name="driver" class="form-control"
+                                value="{{ conn.driver if conn else 'ODBC Driver 17 for SQL Server' }}">
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="mb-1"><i class="bi bi-sliders text-primary"></i> Limiares de alerta</h6>
+                    <p class="text-muted small mb-3">Valores a partir dos quais algo é sinalizado como problema no
+                        dashboard e nas várias páginas deste perfil.</p>
+                    <div class="row g-3">
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label small">Job "pendurado" acima de (min)</label>
+                            <input type="number" name="job_stuck_minutes" class="form-control"
+                                value="{{ conn.job_stuck_minutes if conn and conn.job_stuck_minutes else 60 }}">
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label small">Query "longa" acima de (seg)</label>
+                            <input type="number" name="query_long_seconds" class="form-control"
+                                value="{{ conn.query_long_seconds if conn and conn.query_long_seconds else 30 }}">
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label small">Disco "pouco espaço" abaixo de (%)</label>
+                            <input type="number" name="disk_low_pct" class="form-control"
+                                value="{{ conn.disk_low_pct if conn and conn.disk_low_pct else 15 }}">
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label small">Backup "desatualizado" acima de (dias)</label>
+                            <input type="number" name="backup_stale_days" class="form-control"
+                                value="{{ conn.backup_stale_days if conn and conn.backup_stale_days else 7 }}">
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label small">Intervalo entre snapshots de histórico (min)</label>
+                            <input type="number" name="snapshot_interval_minutes" class="form-control"
+                                value="{{ conn.snapshot_interval_minutes if conn and conn.snapshot_interval_minutes else 15 }}">
+                            <div class="form-text">Só tem efeito se este for o perfil principal para histórico. É
+                                preciso reiniciar a app para o valor ter efeito.</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" name="action" value="test" class="btn btn-outline-secondary">
+                            <i class="bi bi-plug"></i> Testar ligação
+                        </button>
+                        <button type="submit" name="action" value="save" class="btn btn-primary">
+                            <i class="bi bi-check2"></i> Guardar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleAuthFields() {
+        const isWindows = document.getElementById('authType').value === 'windows';
+        document.querySelectorAll('.sql-auth-field').forEach(el => {
+            el.style.display = isWindows ? 'none' : '';
+        });
+    }
+    document.getElementById('authType').addEventListener('change', toggleAuthFields);
+    toggleAuthFields();
+</script>
+{% endblock %}

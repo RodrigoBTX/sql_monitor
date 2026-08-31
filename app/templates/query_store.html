@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+{% block title %}Query Store - SQL Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-graph-up-arrow"></i> Query Store</div>
+        <div class="page-subtitle">Regressões, maiores consumidores de recursos, esperas e estabilidade de planos — tal
+            como os relatórios do SSMS.</div>
+    </div>
+    <form class="d-flex gap-2" method="get" id="dbForm">
+        <input type="text" name="db" class="form-control form-control-sm" value="{{ database }}" style="width: 200px;"
+            placeholder="Nome da base de dados">
+        <button class="btn btn-sm btn-outline-secondary" type="submit">Ver</button>
+    </form>
+</div>
+
+{% if error %}
+<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% elif not status %}
+<div class="empty-state"><i class="bi bi-plug"></i>Sem ligação configurada.</div>
+{% elif not status.enabled %}
+<div class="empty-state">
+    <i class="bi bi-toggle-off"></i>
+    A Query Store não está ativa na base de dados <strong>{{ database }}</strong> (estado: {{ status.state or
+    "desconhecido" }}).
+    <div class="mt-2"><code>ALTER DATABASE [{{ database }}] SET QUERY_STORE = ON;</code></div>
+</div>
+{% else %}
+<div class="d-flex align-items-center gap-2 mb-3 small text-muted">
+    <span class="count-pill"><i class="bi bi-check-circle text-success"></i> Ativa em {{ database }}</span>
+    <span>{{ status.state }} · {{ status.storage_mb }} / {{ status.max_storage_mb }} MB · intervalo de {{
+        status.interval_minutes }} min</span>
+</div>
+
+<ul class="nav nav-pills mb-3 flex-wrap gap-1" id="qsTabs">
+    <li class="nav-item"><button class="nav-link active" data-report="regressed">Regressed Queries</button></li>
+    <li class="nav-item"><button class="nav-link" data-report="top-resource">Top Resource Consuming</button></li>
+    <li class="nav-item"><button class="nav-link" data-report="overall-consumption">Overall Resource
+            Consumption</button></li>
+    <li class="nav-item"><button class="nav-link" data-report="wait-stats">Query Wait Statistics</button></li>
+    <li class="nav-item"><button class="nav-link" data-report="high-variation">Queries With High Variation</button></li>
+    <li class="nav-item"><button class="nav-link" data-report="forced-plans">Queries With Forced Plans</button></li>
+</ul>
+
+<div class="table-card mb-3">
+    <div class="p-2 px-3">
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+                <label class="form-label small mb-0 text-muted">Período</label>
+                <select id="hoursSelect" class="form-select form-select-sm">
+                    <option value="1">Última hora</option>
+                    <option value="6">Últimas 6h</option>
+                    <option value="24" selected>Último dia</option>
+                    <option value="168">Última semana</option>
+                </select>
+            </div>
+            <div id="metricControls" class="d-flex gap-3" style="display: none !important;">
+                <div>
+                    <label class="form-label small mb-0 text-muted">Métrica</label>
+                    <select id="metricSelect" class="form-select form-select-sm">
+                        <option value="duration">Duração</option>
+                        <option value="cpu">CPU</option>
+                        <option value="reads">Leituras lógicas</option>
+                        <option value="executions">Execuções</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label small mb-0 text-muted">Estatística</label>
+                    <select id="statisticSelect" class="form-select form-select-sm">
+                        <option value="total">Total</option>
+                        <option value="avg">Média</option>
+                        <option value="min">Mínimo</option>
+                        <option value="max">Máximo</option>
+                    </select>
+                </div>
+            </div>
+            <button id="refreshBtn" class="btn btn-sm btn-outline-secondary ms-auto">
+                <i class="bi bi-arrow-clockwise"></i> Atualizar
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="qsAlert"></div>
+<div id="qsLoading" class="text-muted small mb-2" style="display:none;">
+    <span class="spinner-border spinner-border-sm"></span> A carregar…
+</div>
+
+<div class="chart-card mb-3" id="chartCard">
+    <canvas id="qsChart" height="90"></canvas>
+</div>
+
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" id="qsTable">
+            <thead>
+                <tr id="qsTableHead"></tr>
+            </thead>
+            <tbody id="qsTableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal com o texto completo da query -->
+<div class="modal fade" id="queryTextModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-code-square"></i> Texto da query</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="queryTextContent" style="white-space: pre-wrap; font-size: 0.85rem;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if status and status.enabled %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        const API_BASE = "{{ url_for('monitoring.query_store') }}/api/";
+        const dbName = {{ database| tojson
+    }};
+    let chart = null;
+    let currentReport = "regressed";
+
+    // Paleta consistente com o resto da app (vermelho de alerta, azul de marca, etc.)
+    const PALETTE = { red: "#dc3545", blue: "#3b5bdb", orange: "#fd7e14", purple: "#6f42c1", teal: "#20c997" };
+    Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = "#6b7280";
+    Chart.defaults.plugins.tooltip.backgroundColor = "#14171f";
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+
+    const truncate = (s, n) => (s && s.length > n) ? s.slice(0, n) + "…" : (s || "");
+    const fmtNum = (v) => (v === null || v === undefined) ? "-" : (typeof v === "number" ? Math.round(v * 100) / 100 : v);
+
+    function showAlert(msg, type) {
+        document.getElementById("qsAlert").innerHTML = msg
+            ? `<div class="empty-state state-bad mb-3"><i class="bi bi-exclamation-triangle"></i>${msg}</div>` : "";
+    }
+    function setLoading(on) {
+        document.getElementById("qsLoading").style.display = on ? "" : "none";
+    }
+
+    function setChart(labels, datasets, type) {
+        document.getElementById("chartCard").style.display = labels.length ? "" : "none";
+        if (chart) chart.destroy();
+        if (!labels.length) return;
+        const isBar = (type || "bar") === "bar";
+        const ctx = document.getElementById("qsChart").getContext("2d");
+        chart = new Chart(ctx, {
+            type: type || "bar",
+            data: {
+                labels: labels,
+                datasets: datasets.map(ds => ({
+                    ...ds,
+                    borderRadius: isBar ? 6 : 0,
+                    borderWidth: isBar ? 0 : 2,
+                    tension: 0.3,
+                    fill: !isBar,
+                    pointRadius: isBar ? 0 : 2,
+                    pointHoverRadius: 4,
+                })),
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: "index", intersect: false },
+                plugins: { legend: { display: datasets.length > 1, labels: { usePointStyle: true, boxWidth: 8 } } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: "rgba(15,23,42,.06)" }, ticks: { precision: 0 } },
+                    x: { grid: { display: false } },
+                },
+            },
+        });
+    }
+
+    function setTable(columns, rows, queryTextField) {
+        document.getElementById("qsTableHead").innerHTML =
+            columns.map(c => `<th>${c.label}</th>`).join("");
+        document.getElementById("qsTableBody").innerHTML = rows.map(r => {
+            const cells = columns.map(c => {
+                let val = r[c.key];
+                if (c.key === queryTextField) {
+                    return `<td class="text-truncate text-truncate-cell" style="cursor: pointer;" data-fulltext="${encodeURIComponent(val || "")}" onclick="window.qsShowQueryText(this)" title="clique para ver o texto completo">${truncate(val, 80)}</td>`;
+                }
+                return `<td>${fmtNum(val)}</td>`;
+            }).join("");
+            return `<tr>${cells}</tr>`;
+        }).join("") || `<tr><td colspan="${columns.length}"><div class="empty-state state-ok border-0 shadow-none py-4"><i class="bi bi-check-circle"></i>Sem dados para este período.</div></td></tr>`;
+    }
+
+    window.qsShowQueryText = function (el) {
+        document.getElementById("queryTextContent").textContent = decodeURIComponent(el.dataset.fulltext);
+        new bootstrap.Modal(document.getElementById("queryTextModal")).show();
+    };
+
+    function hours() { return document.getElementById("hoursSelect").value; }
+
+    async function fetchReport(report, extraParams) {
+        const params = new URLSearchParams({ db: dbName, hours: hours(), ...extraParams });
+        const res = await fetch(API_BASE + report + "?" + params.toString());
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erro desconhecido");
+        return data.rows;
+    }
+
+    async function loadRegressed() {
+        const rows = await fetchReport("regressed");
+        setChart(rows.map(r => "#" + r.query_id), [{
+            label: "Fator de regressão (x)", data: rows.map(r => r.regression_factor),
+            backgroundColor: PALETTE.red,
+        }]);
+        setTable([
+            { key: "query_id", label: "Query ID" },
+            { key: "recent_avg_ms", label: "Duração recente (ms)" },
+            { key: "hist_avg_ms", label: "Duração histórica (ms)" },
+            { key: "regression_factor", label: "Fator" },
+            { key: "recent_executions", label: "Execuções recentes" },
+            { key: "query_sql_text", label: "Query" },
+        ], rows, "query_sql_text");
+    }
+
+    async function loadTopResource() {
+        const metric = document.getElementById("metricSelect").value;
+        const statistic = document.getElementById("statisticSelect").value;
+        const rows = await fetchReport("top-resource", { metric, statistic });
+        setChart(rows.map(r => "#" + r.query_id), [{
+            label: "Valor da métrica", data: rows.map(r => r.metric_value),
+            backgroundColor: PALETTE.blue,
+        }]);
+        setTable([
+            { key: "query_id", label: "Query ID" },
+            { key: "metric_value", label: "Valor" },
+            { key: "total_executions", label: "Execuções" },
+            { key: "query_sql_text", label: "Query" },
+        ], rows, "query_sql_text");
+    }
+
+    async function loadOverallConsumption() {
+        const rows = await fetchReport("overall-consumption");
+        const labels = rows.map(r => new Date(r.start_time).toLocaleString());
+        setChart(labels, [
+            { label: "Duração total (ms)", data: rows.map(r => r.total_duration_ms), borderColor: PALETTE.blue, backgroundColor: PALETTE.blue + "22" },
+            { label: "CPU total (ms)", data: rows.map(r => r.total_cpu_ms), borderColor: PALETTE.orange, backgroundColor: PALETTE.orange + "22" },
+        ], "line");
+        setTable([
+            { key: "start_time", label: "Início do intervalo" },
+            { key: "total_executions", label: "Execuções" },
+            { key: "total_duration_ms", label: "Duração total (ms)" },
+            { key: "total_cpu_ms", label: "CPU total (ms)" },
+            { key: "total_logical_reads", label: "Leituras lógicas" },
+        ], rows, null);
+    }
+
+    async function loadWaitStats() {
+        const rows = await fetchReport("wait-stats");
+        setChart(rows.map(r => "#" + r.query_id + " (" + r.wait_category_desc + ")"), [{
+            label: "Espera total (ms)", data: rows.map(r => r.total_wait_ms),
+            backgroundColor: PALETTE.purple,
+        }]);
+        setTable([
+            { key: "query_id", label: "Query ID" },
+            { key: "wait_category_desc", label: "Categoria de espera" },
+            { key: "total_wait_ms", label: "Espera total (ms)" },
+            { key: "query_sql_text", label: "Query" },
+        ], rows, "query_sql_text");
+    }
+
+    async function loadHighVariation() {
+        const rows = await fetchReport("high-variation");
+        setChart(rows.map(r => "#" + r.query_id), [{
+            label: "Rácio de variação (desvio/média)", data: rows.map(r => r.variation_ratio),
+            backgroundColor: PALETTE.teal,
+        }]);
+        setTable([
+            { key: "query_id", label: "Query ID" },
+            { key: "avg_duration_ms", label: "Duração média (ms)" },
+            { key: "stdev_duration_ms", label: "Desvio padrão (ms)" },
+            { key: "variation_ratio", label: "Rácio variação" },
+            { key: "total_executions", label: "Execuções" },
+            { key: "query_sql_text", label: "Query" },
+        ], rows, "query_sql_text");
+    }
+
+    async function loadForcedPlans() {
+        const rows = await fetchReport("forced-plans");
+        setChart([], []);
+        setTable([
+            { key: "query_id", label: "Query ID" },
+            { key: "plan_id", label: "Plan ID" },
+            { key: "plan_forcing_type_desc", label: "Tipo de forçagem" },
+            { key: "last_execution_time", label: "Última execução" },
+            { key: "count_compiles", label: "Nº compilações" },
+            { key: "query_sql_text", label: "Query" },
+        ], rows, "query_sql_text");
+    }
+
+    const LOADERS = {
+        "regressed": loadRegressed,
+        "top-resource": loadTopResource,
+        "overall-consumption": loadOverallConsumption,
+        "wait-stats": loadWaitStats,
+        "high-variation": loadHighVariation,
+        "forced-plans": loadForcedPlans,
+    };
+
+    async function loadCurrent() {
+        showAlert(null);
+        setLoading(true);
+        document.getElementById("metricControls").style.setProperty(
+            "display", currentReport === "top-resource" ? "flex" : "none", "important"
+        );
+        try {
+            await LOADERS[currentReport]();
+        } catch (e) {
+            setChart([], []);
+            document.getElementById("qsTableBody").innerHTML = "";
+            document.getElementById("qsTableHead").innerHTML = "";
+            showAlert(e.message, "danger");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    document.querySelectorAll("#qsTabs .nav-link").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#qsTabs .nav-link").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            currentReport = btn.dataset.report;
+            loadCurrent();
+        });
+    });
+    document.getElementById("refreshBtn").addEventListener("click", loadCurrent);
+    document.getElementById("hoursSelect").addEventListener("change", loadCurrent);
+    document.getElementById("metricSelect").addEventListener("change", loadCurrent);
+    document.getElementById("statisticSelect").addEventListener("change", loadCurrent);
+
+    loadCurrent();
+}) ();
+</script>
+{% endif %}
+{% endblock %}

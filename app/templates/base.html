@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="pt">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}SQL Monitor{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f3f5f9;
+            --card-bg: #ffffff;
+            --border: rgba(15, 23, 42, 0.06);
+            --text-muted: #6b7280;
+            --ok-bg: #e7f6ec;
+            --ok-fg: #198754;
+            --bad-bg: #fdecea;
+            --bad-fg: #dc3545;
+            --brand: #3b5bdb;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #1f2937;
+        }
+
+        /* Navbar */
+        .navbar {
+            background: #14171f !important;
+            box-shadow: 0 1px 0 rgba(255, 255, 255, .06);
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            letter-spacing: .2px;
+        }
+
+        .navbar .nav-link {
+            color: rgba(255, 255, 255, .72) !important;
+            font-size: .92rem;
+            padding: .5rem .75rem !important;
+        }
+
+        .navbar .nav-link:hover {
+            color: #fff !important;
+        }
+
+        .navbar .nav-link.active {
+            color: #fff !important;
+            font-weight: 600;
+        }
+
+        .navbar .dropdown-menu {
+            --bs-dropdown-min-width: 15rem;
+        }
+
+        /* Generic cards */
+        .card-metric {
+            border: none;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-metric .value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .table-sm td,
+        .table-sm th {
+            vertical-align: middle;
+        }
+
+        .badge-status {
+            font-size: 0.8rem;
+        }
+
+        /* Dashboard status tiles */
+        .section-label {
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--text-muted);
+            margin: 1.5rem 0 .6rem;
+        }
+
+        .tile {
+            display: flex;
+            align-items: center;
+            gap: .85rem;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: .85rem;
+            padding: .9rem 1.1rem;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+            transition: box-shadow .15s ease, transform .15s ease;
+            height: 100%;
+        }
+
+        a.tile:hover {
+            box-shadow: 0 6px 16px rgba(15, 23, 42, .09);
+            transform: translateY(-1px);
+            color: inherit;
+        }
+
+        .tile-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+        }
+
+        .tile-ok .tile-icon {
+            background: var(--ok-bg);
+            color: var(--ok-fg);
+        }
+
+        .tile-bad .tile-icon {
+            background: var(--bad-bg);
+            color: var(--bad-fg);
+        }
+
+        .tile-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+
+        .tile-ok .tile-value {
+            color: var(--ok-fg);
+        }
+
+        .tile-bad .tile-value {
+            color: var(--bad-fg);
+        }
+
+        .tile-label {
+            font-size: .8rem;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        .tile-arrow {
+            margin-left: auto;
+            color: #c7cbd3;
+        }
+
+        .link-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 2rem;
+            padding: .45rem 1rem;
+            font-size: .85rem;
+            text-decoration: none;
+            color: #374151;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+            transition: box-shadow .15s ease;
+        }
+
+        .link-pill:hover {
+            box-shadow: 0 4px 10px rgba(15, 23, 42, .08);
+            color: var(--brand);
+        }
+
+        /* Page header, used at the top of every page for consistency */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .page-title {
+            font-weight: 700;
+            margin-bottom: .15rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .page-title i {
+            color: var(--brand);
+        }
+
+        .page-subtitle {
+            color: var(--text-muted);
+            font-size: .85rem;
+            max-width: 60ch;
+        }
+
+        /* Tables: consistent "table card" look everywhere */
+        .table-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: .85rem;
+            overflow: hidden;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+        }
+
+        .table-card .table {
+            margin-bottom: 0;
+        }
+
+        .table-card thead th {
+            background: #f8f9fc;
+            color: var(--text-muted);
+            font-size: .7rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
+            padding: .7rem 1rem;
+            white-space: nowrap;
+        }
+
+        .table-card tbody td {
+            padding: .6rem 1rem;
+            border-color: var(--border);
+            font-size: .87rem;
+            vertical-align: middle;
+        }
+
+        .table-card tbody tr:hover td {
+            background: #f8f9fc;
+        }
+
+        .table-card tbody tr.row-bad td {
+            background: rgba(220, 53, 69, .07);
+        }
+
+        .table-card tbody tr.row-bad:hover td {
+            background: rgba(220, 53, 69, .12);
+        }
+
+        .table-card tbody tr.row-warn td {
+            background: rgba(255, 193, 7, .10);
+        }
+
+        .table-card tbody tr.row-warn:hover td {
+            background: rgba(255, 193, 7, .16);
+        }
+
+        .table-card .text-truncate-cell {
+            max-width: 320px;
+            cursor: default;
+        }
+
+        /* Empty / calm states */
+        .empty-state {
+            text-align: center;
+            padding: 2.75rem 1.25rem;
+            color: var(--text-muted);
+            background: var(--card-bg);
+            border: 1px dashed var(--border);
+            border-radius: .85rem;
+        }
+
+        .empty-state i {
+            font-size: 1.9rem;
+            display: block;
+            margin-bottom: .6rem;
+            opacity: .55;
+        }
+
+        .empty-state.state-ok i {
+            color: var(--ok-fg);
+            opacity: .9;
+        }
+
+        .empty-state.state-bad {
+            border-style: solid;
+            border-color: rgba(220, 53, 69, .25);
+            background: var(--bad-bg);
+            color: #7a1f28;
+        }
+
+        .empty-state.state-bad i {
+            color: var(--bad-fg);
+            opacity: 1;
+        }
+
+        /* Chart containers */
+        .chart-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: .85rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+            padding: 1.1rem 1.25rem;
+        }
+
+        /* Small helper pill for counts inside headers */
+        .count-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            background: #eef1f8;
+            color: #374151;
+            border-radius: 2rem;
+            padding: .2rem .7rem;
+            font-size: .78rem;
+            font-weight: 600;
+        }
+
+        /* Custom check cards (colored top accent by status) */
+        .check-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: .85rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .check-card-accent {
+            height: 4px;
+        }
+
+        .check-card.is-bad .check-card-accent {
+            background: var(--bad-fg);
+        }
+
+        .check-card.is-ok .check-card-accent {
+            background: var(--ok-fg);
+        }
+
+        .check-card.is-inactive .check-card-accent {
+            background: #d7dae0;
+        }
+
+        .check-card .check-value {
+            font-size: 2.1rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .check-card.is-bad .check-value {
+            color: var(--bad-fg);
+        }
+
+        .check-card.is-ok .check-value {
+            color: var(--ok-fg);
+        }
+    </style>
+</head>
+
+<body>
+    {% if current_user.is_authenticated %}
+    {% set ep = request.endpoint or "" %}
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('dashboard.index') }}"><i class="bi bi-hdd-network"></i> SQL
+                Monitor</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="nav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'dashboard.index' }}"
+                            href="{{ url_for('dashboard.index') }}">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'monitoring.jobs' }}"
+                            href="{{ url_for('monitoring.jobs') }}">Jobs</a></li>
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'monitoring.sessions' }}"
+                            href="{{ url_for('monitoring.sessions') }}">Sessões</a></li>
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'monitoring.queries' }}"
+                            href="{{ url_for('monitoring.queries') }}">Queries</a></li>
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'monitoring.query_store' }}"
+                            href="{{ url_for('monitoring.query_store') }}">Query Store</a></li>
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'custom_checks.index' }}"
+                            href="{{ url_for('custom_checks.index') }}">Checks</a></li>
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'trends.index' }}"
+                            href="{{ url_for('trends.index') }}">Tendências</a></li>
+                    <li class="nav-item dropdown">
+                        {% set health_eps = ['monitoring.backups', 'monitoring.capacity', 'monitoring.index_health',
+                        'monitoring.deadlocks'] %}
+                        <a class="nav-link dropdown-toggle {{ 'active' if ep in health_eps }}" href="#" role="button"
+                            data-bs-toggle="dropdown">Saúde da instância</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.backups') }}"><i
+                                        class="bi bi-archive me-1"></i> Backups</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.capacity') }}"><i
+                                        class="bi bi-speedometer2 me-1"></i> Capacidade (waits/disco/memória/I-O)</a>
+                            </li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.index_health') }}"><i
+                                        class="bi bi-diagram-3 me-1"></i> Índices</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.deadlocks') }}"><i
+                                        class="bi bi-exclamation-octagon me-1"></i> Deadlocks</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    {% if all_profiles and all_profiles|length > 1 %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-hdd-stack"></i> {{ active_profile.name }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% for p in all_profiles %}
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center justify-content-between {{ 'active' if p.id == active_profile.id }}"
+                                    href="{{ url_for('profiles.switch', profile_id=p.id) }}">
+                                    <span>{{ p.name }}</span>
+                                    {% if p.is_snapshot_primary %}<i class="bi bi-star-fill text-warning ms-2"
+                                        title="Principal para histórico"></i>{% endif %}
+                                </a>
+                            </li>
+                            {% endfor %}
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li><a class="dropdown-item" href="{{ url_for('settings.setup') }}"><i
+                                        class="bi bi-gear me-1"></i> Gerir perfis</a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link {{ 'active' if ep == 'settings.setup' }}"
+                            href="{{ url_for('settings.setup') }}"><i class="bi bi-gear"></i> Definições</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}"><i
+                                class="bi bi-box-arrow-right"></i> Sair</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <div class="container-fluid px-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Paginação genérica no browser para tabelas grandes: qualquer <table>
+        // com o atributo data-page-size="N" fica automaticamente paginada a N
+        // linhas por página, com uma barrinha de "anterior/seguinte" no fundo
+        // do table-card. Não precisa de nenhum pedido novo ao servidor.
+        function initTablePagination(table, pageSize) {
+            const tbody = table.querySelector("tbody");
+            const card = table.closest(".table-card");
+            if (!tbody || !card || !pageSize) return;
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            if (rows.length <= pageSize) return; // cabe tudo numa página, não precisa de controlos
+
+            let page = 1;
+            const totalPages = Math.ceil(rows.length / pageSize);
+
+            const bar = document.createElement("div");
+            bar.className = "d-flex justify-content-between align-items-center px-3 py-2";
+            bar.style.borderTop = "1px solid var(--border)";
+            bar.style.background = "#f8f9fc";
+            bar.innerHTML =
+                '<span class="small text-muted" data-role="info"></span>' +
+                '<div class="btn-group btn-group-sm" role="group">' +
+                '<button type="button" class="btn btn-outline-secondary" data-role="prev"><i class="bi bi-chevron-left"></i></button>' +
+                '<button type="button" class="btn btn-outline-secondary" data-role="next"><i class="bi bi-chevron-right"></i></button>' +
+                "</div>";
+            card.appendChild(bar);
+
+            const info = bar.querySelector('[data-role="info"]');
+            const prevBtn = bar.querySelector('[data-role="prev"]');
+            const nextBtn = bar.querySelector('[data-role="next"]');
+
+            function render() {
+                const start = (page - 1) * pageSize;
+                const end = start + pageSize;
+                rows.forEach((row, idx) => {
+                    row.style.display = idx >= start && idx < end ? "" : "none";
+                });
+                info.textContent = `Página ${page} de ${totalPages} (${rows.length} linhas)`;
+                prevBtn.disabled = page === 1;
+                nextBtn.disabled = page === totalPages;
+            }
+
+            prevBtn.addEventListener("click", () => { if (page > 1) { page--; render(); } });
+            nextBtn.addEventListener("click", () => { if (page < totalPages) { page++; render(); } });
+
+            render();
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            document.querySelectorAll("table[data-page-size]").forEach(function (table) {
+                initTablePagination(table, parseInt(table.getAttribute("data-page-size"), 10));
+            });
+        });
+
+        // Exportação para CSV: lê o cabeçalho e todas as linhas de uma tabela
+        // (mesmo as escondidas pela paginação acima) e faz descarregar um
+        // ficheiro .csv com esse conteúdo, sem precisar de pedir nada ao
+        // servidor — usa sempre os dados já carregados na página.
+        function _csvEscape(value) {
+            value = (value || "").replace(/\s+/g, " ").trim();
+            if (/[",\n\r]/.test(value)) {
+                return '"' + value.replace(/"/g, '""') + '"';
+            }
+            return value;
+        }
+
+        function exportTableToCsv(table, filenamePrefix) {
+            if (!table) return;
+            const headerCells = table.querySelectorAll("thead th");
+            const lines = [Array.from(headerCells).map((th) => _csvEscape(th.textContent)).join(",")];
+            table.querySelectorAll("tbody tr").forEach((tr) => {
+                const cells = Array.from(tr.querySelectorAll("td")).map((td) => _csvEscape(td.textContent));
+                lines.push(cells.join(","));
+            });
+            const csvContent = lines.join("\r\n");
+            const today = new Date().toISOString().slice(0, 10);
+            const filename = `${filenamePrefix}_${today}.csv`;
+
+            // BOM no início para o Excel reconhecer corretamente UTF-8 (acentos).
+            const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Liga os botões "Exportar CSV" via atributos data-* (em vez de
+        // onclick="..." inline) para não haver problemas de aspas quando o
+        // nome do ficheiro inclui texto vindo do servidor (ex: o nome da BD).
+        document.addEventListener("click", function (e) {
+            const btn = e.target.closest("[data-export-table]");
+            if (!btn) return;
+            const table = document.getElementById(btn.getAttribute("data-export-table"));
+            const filenamePrefix = btn.getAttribute("data-export-filename") || "export";
+            exportTableToCsv(table, filenamePrefix);
+        });
+
+        // Confirmação antes de submeter um formulário (ex: remover um perfil
+        // ou um Custom Check) — via atributo data-confirm em vez de
+        // onsubmit="confirm('...')" inline, para não haver problemas de aspas
+        // quando o texto inclui algo vindo do servidor (ex: o nome do perfil).
+        document.addEventListener("submit", function (e) {
+            const msg = e.target.getAttribute && e.target.getAttribute("data-confirm");
+            if (msg && !confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

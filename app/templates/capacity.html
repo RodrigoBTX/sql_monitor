@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Capacidade - SQL Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-speedometer2"></i> Capacidade</div>
+        <div class="page-subtitle">Memória, espaço em disco, I/O por ficheiro e principais tipos de espera da instância.
+        </div>
+    </div>
+</div>
+
+{% if error %}
+<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% else %}
+
+<div class="section-label mt-0">Memória</div>
+{% if not memory %}
+<div class="empty-state"><i class="bi bi-inboxes"></i>Sem dados de memória.</div>
+{% else %}
+<div class="row g-3">
+    <div class="col-sm-6 col-lg-3">
+        <div class="tile {{ 'tile-bad' if memory.ple_low else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+                <div class="tile-value">{{ memory.page_life_expectancy }}s</div>
+                <div class="tile-label">Page Life Expectancy</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="tile tile-ok">
+            <div class="tile-icon"><i class="bi bi-graph-up"></i></div>
+            <div>
+                <div class="tile-value">{{ memory.buffer_cache_hit_ratio }}%</div>
+                <div class="tile-label">Buffer cache hit ratio</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="tile tile-ok">
+            <div class="tile-icon"><i class="bi bi-memory"></i></div>
+            <div>
+                <div class="tile-value">{{ memory.sql_server_memory_used_mb }}<span class="fs-6"> MB</span></div>
+                <div class="tile-label">Usada pelo SQL Server</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="tile tile-ok">
+            <div class="tile-icon"><i class="bi bi-cpu"></i></div>
+            <div>
+                <div class="tile-value">{{ memory.available_physical_memory_mb }}<span class="fs-6"> MB</span></div>
+                <div class="tile-label">Memória física disponível</div>
+            </div>
+        </div>
+    </div>
+</div>
+<p class="text-muted small mt-2">Page Life Expectancy baixo (a vermelho abaixo de 300s) é o sinal clássico de pressão de
+    memória — o buffer pool está a despejar páginas depressa demais.</p>
+{% endif %}
+
+<div class="section-label d-flex justify-content-between align-items-center">
+    <span>Espaço livre nos volumes de disco</span>
+    {% if volumes %}
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+        style="text-transform: none; letter-spacing: normal; font-size: .78rem;" data-export-table="volumesTable"
+        data-export-filename="volumes">
+        <i class="bi bi-download"></i> Exportar CSV
+    </button>
+    {% endif %}
+</div>
+{% if not volumes %}
+<div class="empty-state"><i class="bi bi-inboxes"></i>Sem dados de volumes.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="volumesTable">
+            <thead>
+                <tr>
+                    <th>Volume</th>
+                    <th>Total (GB)</th>
+                    <th>Livre (GB)</th>
+                    <th style="width: 220px;">Livre (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in volumes %}
+                <tr class="{{ 'row-bad' if v.is_low else '' }}">
+                    <td class="fw-semibold">{{ v.volume_mount_point }}</td>
+                    <td>{{ v.total_gb }}</td>
+                    <td>{{ v.free_gb }}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height: 6px;">
+                                <div class="progress-bar {{ 'bg-danger' if v.is_low else 'bg-success' }}"
+                                    style="width: {{ v.free_pct }}%"></div>
+                            </div>
+                            <span class="small fw-semibold" style="width: 3.2rem;">{{ v.free_pct }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<p class="text-muted small mt-2">A vermelho: volumes com menos de espaço livre que o limiar definido nas Definições.</p>
+{% endif %}
+
+<div class="section-label d-flex justify-content-between align-items-center">
+    <span>I/O por ficheiro</span>
+    {% if io_stats %}
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+        style="text-transform: none; letter-spacing: normal; font-size: .78rem;" data-export-table="ioStatsTable"
+        data-export-filename="io_por_ficheiro">
+        <i class="bi bi-download"></i> Exportar CSV
+    </button>
+    {% endif %}
+</div>
+{% if not io_stats %}
+<div class="empty-state"><i class="bi bi-inboxes"></i>Sem dados de I/O.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="ioStatsTable">
+            <thead>
+                <tr>
+                    <th>Base de dados</th>
+                    <th>Ficheiro</th>
+                    <th>Tipo</th>
+                    <th>Latência média leitura (ms)</th>
+                    <th>Latência média escrita (ms)</th>
+                    <th>Tamanho (MB)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in io_stats %}
+                <tr class="{{ 'row-bad' if r.is_slow else '' }}">
+                    <td>{{ r.database_name }}</td>
+                    <td class="fw-semibold">{{ r.logical_name }}</td>
+                    <td>{{ r.type_desc }}</td>
+                    <td>{{ r.avg_read_stall_ms if r.avg_read_stall_ms is not none else "-" }}</td>
+                    <td>{{ r.avg_write_stall_ms if r.avg_write_stall_ms is not none else "-" }}</td>
+                    <td>{{ r.size_mb }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<p class="text-muted small mt-2">A vermelho: latência média acima de 20ms (referência comum para "disco lento"). Valores
+    acumulados desde o último restart do serviço.</p>
+{% endif %}
+
+<div class="section-label d-flex justify-content-between align-items-center">
+    <span>Principais tipos de espera</span>
+    {% if waits %}
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+        style="text-transform: none; letter-spacing: normal; font-size: .78rem;" data-export-table="waitsTable"
+        data-export-filename="wait_stats">
+        <i class="bi bi-download"></i> Exportar CSV
+    </button>
+    {% endif %}
+</div>
+{% if not waits %}
+<div class="empty-state"><i class="bi bi-inboxes"></i>Sem dados de wait stats.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="waitsTable">
+            <thead>
+                <tr>
+                    <th>Wait type</th>
+                    <th>Tempo total espera (ms)</th>
+                    <th>Tempo de sinal (ms)</th>
+                    <th>Tempo de recurso (ms)</th>
+                    <th>Nº de esperas</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in waits %}
+                <tr>
+                    <td class="fw-semibold">{{ w.wait_type }}</td>
+                    <td>{{ w.wait_time_ms }}</td>
+                    <td>{{ w.signal_wait_time_ms }}</td>
+                    <td>{{ w.resource_wait_time_ms }}</td>
+                    <td>{{ w.waiting_tasks_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<p class="text-muted small mt-2">Sinal alto = pressão de CPU. Tempo de recurso alto (ex: PAGEIOLATCH, LCK_*) = disco
+    lento ou bloqueios. Acumulados desde o último restart do serviço.</p>
+{% endif %}
+
+{% endif %}
+{% endblock %}

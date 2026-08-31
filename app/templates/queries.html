@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Queries - SQL Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-code-square"></i> Queries em execução</div>
+        <div class="page-subtitle">Queries a correr agora na instância — a vermelho as que estão a bloquear outra
+            sessão, a amarelo as demoradas.</div>
+    </div>
+    {% if rows %}
+    <div class="d-flex align-items-center gap-2">
+        <span class="count-pill"><i class="bi bi-list-ul"></i> {{ rows|length }} em execução</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-export-table="queriesTable"
+            data-export-filename="queries">
+            <i class="bi bi-download"></i> Exportar CSV
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+{% if error %}
+<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% elif not rows %}
+<div class="empty-state state-ok"><i class="bi bi-check-circle"></i>Sem queries em execução de momento.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="queriesTable">
+            <thead>
+                <tr>
+                    <th>Session ID</th>
+                    <th>BD</th>
+                    <th>Estado</th>
+                    <th>Bloqueada por</th>
+                    <th>Wait type</th>
+                    <th>Duração (ms)</th>
+                    <th>CPU (ms)</th>
+                    <th>Query</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="{{ 'row-bad' if r.is_blocked else ('row-warn' if r.is_long_running else '') }}">
+                    <td class="fw-semibold">{{ r.session_id }}</td>
+                    <td>{{ r.database_name }}</td>
+                    <td>{{ r.status }}</td>
+                    <td>{% if r.is_blocked %}<span class="badge bg-danger">{{ r.blocking_session_id }}</span>{% else
+                        %}<span class="text-muted">-</span>{% endif %}</td>
+                    <td>{{ r.wait_type or "-" }}</td>
+                    <td>{{ r.total_elapsed_time }}</td>
+                    <td>{{ r.cpu_time }}</td>
+                    <td class="text-truncate text-truncate-cell" style="max-width: 400px;" title="{{ r.query_text }}">{{
+                        r.query_text }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Sessões - SQL Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-people"></i> Sessões ativas</div>
+        <div class="page-subtitle">Todas as ligações de utilizador abertas na instância, e quais estão à espera de outra
+            sessão libertar um recurso.</div>
+    </div>
+    {% if rows %}
+    <div class="d-flex align-items-center gap-2">
+        <span class="count-pill"><i class="bi bi-list-ul"></i> {{ rows|length }} sessõe{{ "s" if rows|length != 1 else
+            "" }}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-export-table="sessionsTable"
+            data-export-filename="sessoes">
+            <i class="bi bi-download"></i> Exportar CSV
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+{% if error %}
+<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% elif not rows %}
+<div class="empty-state state-ok"><i class="bi bi-check-circle"></i>Sem sessões de utilizador ativas de momento.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="sessionsTable">
+            <thead>
+                <tr>
+                    <th>Session ID</th>
+                    <th>Login</th>
+                    <th>Host</th>
+                    <th>Programa</th>
+                    <th>Estado</th>
+                    <th>Bloqueada por</th>
+                    <th>Wait type</th>
+                    <th>Últ. pedido (s)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="{{ 'row-warn' if r.is_blocked else '' }}">
+                    <td class="fw-semibold">{{ r.session_id }}</td>
+                    <td>{{ r.login_name }}</td>
+                    <td>{{ r.host_name }}</td>
+                    <td>{{ r.program_name }}</td>
+                    <td>{{ r.status }}</td>
+                    <td>
+                        {% if r.is_blocked %}
+                        <span class="badge bg-warning text-dark">{{ r.blocking_session_id }}</span>
+                        {% else %}<span class="text-muted">-</span>{% endif %}
+                    </td>
+                    <td>{{ r.wait_type or "-" }}</td>
+                    <td>{{ r.seconds_since_last_request }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

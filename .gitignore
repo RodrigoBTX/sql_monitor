@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+instance/
+.venv/
+venv/
+.env
+
+# artefactos de compilação (PyInstaller)
+build/
+dist/
+*.spec
+
+# editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,3 @@
+# Só é preciso instalar isto na máquina onde vais COMPILAR a app
+# (pip install -r requirements-build.txt), nunca no cliente final.
+pyinstaller==6.11.0

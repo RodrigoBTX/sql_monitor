@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Backups - SQL Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-archive"></i> Estado dos backups</div>
+        <div class="page-subtitle">Última full, diferencial e log de cada base de dados. A vermelho as (não-sistema) sem
+            backup completo dentro do limiar definido nas Definições.</div>
+    </div>
+    {% if rows %}
+    <div class="d-flex align-items-center gap-2">
+        <span class="count-pill"><i class="bi bi-database"></i> {{ rows|length }} base{{ "s" if rows|length != 1 }} de
+            dados</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-export-table="backupsTable"
+            data-export-filename="backups">
+            <i class="bi bi-download"></i> Exportar CSV
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+{% if error %}
+<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% elif not rows %}
+<div class="empty-state"><i class="bi bi-inboxes"></i>Sem dados ou sem ligação ativa.</div>
+{% else %}
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="backupsTable">
+            <thead>
+                <tr>
+                    <th>Base de dados</th>
+                    <th>Modelo recuperação</th>
+                    <th>Estado</th>
+                    <th>Última full</th>
+                    <th>Última diferencial</th>
+                    <th>Último log</th>
+                    <th>Idade (dias)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="{{ 'row-bad' if (r.is_stale and not r.is_system_db) else '' }}">
+                    <td class="fw-semibold">{{ r.database_name }}{% if r.is_system_db %} <span
+                            class="badge bg-secondary fw-normal">sistema</span>{% endif %}</td>
+                    <td>{{ r.recovery_model_desc }}</td>
+                    <td>{{ r.state_desc }}</td>
+                    <td>{{ r.last_full_backup or "Nunca" }}</td>
+                    <td>{{ r.last_diff_backup or "-" }}</td>
+                    <td>{{ r.last_log_backup or "-" }}</td>
+                    <td>
+                        {% if r.full_backup_age_days is not none %}
+                        {{ r.full_backup_age_days }}
+                        {% else %}
+                        <span class="badge bg-danger">sem backup</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
