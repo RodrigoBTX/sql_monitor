@@ -118,6 +118,10 @@ def check_and_notify(app):
     Para cada perfil com notificações ativas, verifica o estado atual e
     envia um email só se acabou de passar de "tudo bem" para "há
     problemas"."""
+    from app.logging_setup import get_logger
+
+    logger = get_logger()
+
     with app.app_context():
         from app import db
         from app.models import Profile, SqlConnection, CustomCheck
@@ -129,37 +133,58 @@ def check_and_notify(app):
 
         profiles = Profile.query.filter_by(notify_enabled=True).all()
         for profile in profiles:
-            if not profile.notify_email:
-                continue
-            conn = SqlConnection.query.filter_by(profile_id=profile.id).first()
-            if not conn:
-                continue
+            try:
+                if not profile.notify_email:
+                    continue
+                conn = SqlConnection.query.filter_by(profile_id=profile.id).first()
+                if not conn:
+                    continue
 
-            checks = CustomCheck.query.filter_by(
-                profile_id=profile.id, active=True
-            ).all()
-            summary = get_summary(conn, custom_checks=checks)
-            is_bad = bool(summary.get("error")) or any(
-                summary.get(k, 0) for k in PROBLEM_KEYS
-            )
+                checks = CustomCheck.query.filter_by(
+                    profile_id=profile.id, active=True
+                ).all()
+                summary = get_summary(conn, custom_checks=checks)
+                is_bad = bool(summary.get("error")) or any(
+                    summary.get(k, 0) for k in PROBLEM_KEYS
+                )
 
-            if is_bad and not profile.notify_last_state:
-                try:
-                    send_email(
-                        settings,
-                        profile.notify_email,
-                        f'[SQL Monitor] Alerta em "{profile.name}"',
-                        _format_alert_body(profile, conn, summary),
-                    )
-                except NotificationError:
-                    # Falha a enviar (ex: SMTP em baixo) não deve impedir o
-                    # resto da app de continuar a funcionar — a próxima
-                    # verificação tenta outra vez, já que só mudamos
-                    # notify_last_state depois disto (ver abaixo).
-                    pass
-                else:
-                    profile.notify_last_state = True
-            elif not is_bad and profile.notify_last_state:
-                profile.notify_last_state = False
+                if is_bad and not profile.notify_last_state:
+                    try:
+                        send_email(
+                            settings,
+                            profile.notify_email,
+                            f'[SQL Monitor] Alerta em "{profile.name}"',
+                            _format_alert_body(profile, conn, summary),
+                        )
+                    except NotificationError as e:
+                        # Falha a enviar (ex: SMTP em baixo) não deve impedir
+                        # o resto da app de continuar a funcionar — a
+                        # próxima verificação tenta outra vez, já que só
+                        # mudamos notify_last_state depois disto (ver
+                        # abaixo). Fica registada para se perceber depois
+                        # porque é que um alerta não chegou.
+                        logger.warning(
+                            'Falha ao enviar notificação do perfil "%s" para %s: %s',
+                            profile.name,
+                            profile.notify_email,
+                            e,
+                        )
+                    else:
+                        profile.notify_last_state = True
+                        logger.info(
+                            'Notificação enviada — perfil "%s" para %s.',
+                            profile.name,
+                            profile.notify_email,
+                        )
+                elif not is_bad and profile.notify_last_state:
+                    profile.notify_last_state = False
+            except Exception:
+                # Um problema inesperado com UM perfil (ex: dados
+                # corrompidos, exceção não prevista) não deve impedir a
+                # verificação dos restantes.
+                logger.exception(
+                    'Falha inesperada a verificar notificações do perfil "%s".',
+                    profile.name,
+                )
 
         db.session.commit()

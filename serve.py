@@ -15,6 +15,7 @@ Variáveis de ambiente opcionais:
                        outro PC na mesma rede.
   SQL_MONITOR_PORT  - por omissão 5000.
 """
+
 import os
 
 from waitress import serve
@@ -24,7 +25,13 @@ from app import create_app
 app = create_app()
 
 if __name__ == "__main__":
+    from app.logging_setup import get_logger
+
     host = os.environ.get("SQL_MONITOR_HOST", "127.0.0.1")
     port = int(os.environ.get("SQL_MONITOR_PORT", "5000"))
+    # O print() só é visto se estiveres a correr isto manualmente numa
+    # consola; o log fica sempre gravado em instance/logs/, mesmo quando
+    # isto corre como serviço do Windows sem nenhuma consola visível.
+    get_logger().info("À escuta em http://%s:%s (waitress)", host, port)
     print(f"SQL Monitor a correr em http://{host}:{port}  (Ctrl+C para parar)")
     serve(app, host=host, port=port, threads=4)

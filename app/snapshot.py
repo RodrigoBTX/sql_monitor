@@ -39,44 +39,64 @@ def _get_primary_profile():
 
 
 def capture_snapshot(app):
+    from app.logging_setup import get_logger
+
+    logger = get_logger()
+
     with app.app_context():
         from app import db
         from app.models import SqlConnection, CustomCheck, MetricSnapshot
         from app.sql_client import get_summary
 
-        profile = _get_primary_profile()
-        if not profile:
-            return
-        conn = SqlConnection.query.filter_by(profile_id=profile.id).first()
-        if not conn:
-            return
-        checks = CustomCheck.query.filter_by(profile_id=profile.id, active=True).all()
-        summary = get_summary(conn, custom_checks=checks)
-        snap = MetricSnapshot(
-            profile_id=profile.id,
-            jobs_failed=summary.get("jobs_failed", 0),
-            jobs_stuck=summary.get("jobs_stuck", 0),
-            sessions_blocked=summary.get("sessions_blocked", 0),
-            queries_long_running=summary.get("queries_long_running", 0),
-            backups_stale=summary.get("backups_stale", 0),
-            disk_low=summary.get("disk_low", 0),
-            custom_checks_breached=summary.get("custom_checks_breached", 0),
-            had_error=bool(summary.get("error")),
-        )
-        db.session.add(snap)
+        try:
+            profile = _get_primary_profile()
+            if not profile:
+                return
+            conn = SqlConnection.query.filter_by(profile_id=profile.id).first()
+            if not conn:
+                return
+            checks = CustomCheck.query.filter_by(
+                profile_id=profile.id, active=True
+            ).all()
+            summary = get_summary(conn, custom_checks=checks)
+            if summary.get("error"):
+                logger.warning(
+                    'Captura de snapshot do perfil "%s" falhou a ligar: %s',
+                    profile.name,
+                    summary["error"],
+                )
+            snap = MetricSnapshot(
+                profile_id=profile.id,
+                jobs_failed=summary.get("jobs_failed", 0),
+                jobs_stuck=summary.get("jobs_stuck", 0),
+                sessions_blocked=summary.get("sessions_blocked", 0),
+                queries_long_running=summary.get("queries_long_running", 0),
+                backups_stale=summary.get("backups_stale", 0),
+                disk_low=summary.get("disk_low", 0),
+                custom_checks_breached=summary.get("custom_checks_breached", 0),
+                had_error=bool(summary.get("error")),
+            )
+            db.session.add(snap)
 
-        # Limpeza dos snapshots antigos deste perfil (mais de
-        # SNAPSHOT_RETENTION_DAYS dias) — corre aqui, "de carona" na mesma
-        # captura periódica, para não precisar de outro job/scheduler à parte.
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-            days=SNAPSHOT_RETENTION_DAYS
-        )
-        MetricSnapshot.query.filter(
-            MetricSnapshot.profile_id == profile.id,
-            MetricSnapshot.taken_at < cutoff,
-        ).delete(synchronize_session=False)
+            # Limpeza dos snapshots antigos deste perfil (mais de
+            # SNAPSHOT_RETENTION_DAYS dias) — corre aqui, "de carona" na
+            # mesma captura periódica, para não precisar de outro job/
+            # scheduler à parte.
+            cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+                days=SNAPSHOT_RETENTION_DAYS
+            )
+            MetricSnapshot.query.filter(
+                MetricSnapshot.profile_id == profile.id,
+                MetricSnapshot.taken_at < cutoff,
+            ).delete(synchronize_session=False)
 
-        db.session.commit()
+            db.session.commit()
+        except Exception:
+            # Uma falha inesperada aqui (ex: disco cheio ao gravar na base
+            # local) não deve derrubar o scheduler em segundo plano — mas
+            # fica registada, para não passar despercebida.
+            db.session.rollback()
+            logger.exception("Falha inesperada a capturar snapshot.")
 
 
 def setup_scheduler(app):

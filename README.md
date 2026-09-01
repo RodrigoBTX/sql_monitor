@@ -168,10 +168,29 @@ ecrã. Se o utilizador indicado não existir, é criado.
 - `instance/last_backup.txt` — só a data/hora do último backup manual
   feito (ver secção "Backup da base de dados local"), para aparecer nas
   Definições. Não tem informação sensível.
+- `instance/logs/sqlmonitor.log` — ficheiro de log da aplicação (ver
+  secção "Logs da aplicação" abaixo).
 
 A pasta `instance/` fica sempre ao lado do `run.py`/`serve.py` (ou, numa
 instalação compilada, ao lado do `.exe`) — nunca é preciso ires à procura
 dela noutro sítio.
+
+## Logs da aplicação
+
+Como a app corre muitas vezes sem ninguém a ver (como serviço do
+Windows, sem janela nenhuma aberta), fica um registo em disco do que se
+passa em segundo plano: arranques, envio de notificações (com sucesso ou
+falha) e falhas inesperadas nas verificações periódicas.
+
+- Ficheiro: `instance/logs/sqlmonitor.log` (texto simples, abre em
+  qualquer editor).
+- Fica um ficheiro novo por dia (rotação à meia-noite), e só ficam
+  guardados os **últimos 30 dias** — o mais antigo é apagado sozinho a
+  cada rotação, tal como o histórico de tendências, para não acumular
+  para sempre.
+- Não é um log detalhado de cada pedido/página aberta (isso encheria o
+  ficheiro sem necessidade) — só regista o que é relevante para
+  perceberes se algo correu mal.
 
 ## Compilar para .exe
 
@@ -220,15 +239,36 @@ servidor, cada um com o seu próprio ficheiro de base de dados.
 Para a app arrancar sozinha com o Windows e continuar a correr em
 segundo plano (sem uma janela aberta nem alguém ter de fazer login),
 regista o `.exe` compilado como serviço, usando o **NSSM** (Non-Sucking
-Service Manager — gratuito, muito usado para isto):
+Service Manager — gratuito, muito usado para isto).
 
-1. Descarrega o NSSM em https://nssm.cc/download e extrai o `nssm.exe`
-   (usa a versão de 64-bit, pasta `win64\`).
-2. Abre uma linha de comandos **como Administrador** e corre:
+### Forma rápida: `install_service.ps1`
+
+1. Descarrega o NSSM em https://nssm.cc/download e coloca o `nssm.exe`
+   (versão de 64-bit, pasta `win64\`) na pasta do projeto, ou no PATH.
+2. Abre um PowerShell **como Administrador**, na pasta do projeto, e
+   corre:
+   ```
+   .\install_service.ps1
+   ```
+   Isto regista e arranca o serviço "SQLMonitor" já com o `SQLMonitor.exe`
+   compilado (`dist\SQLMonitor.exe`), sem precisares de preencher nenhuma
+   janela à mão.
+3. Se precisares de outro nome de serviço, porta, ou endereço (ex: várias
+   instalações na mesma máquina, uma por cliente):
+   ```
+   .\install_service.ps1 -ServiceName "SQLMonitorClienteX" -Port 5001
+   ```
+
+O próprio script explica no fim como atualizar depois de uma versão nova
+e como remover o serviço, se precisares.
+
+### Forma manual (o que o script faz por trás)
+
+1. Abre uma linha de comandos **como Administrador** e corre:
    ```
    nssm install SQLMonitor
    ```
-3. Na janela que abre:
+2. Na janela que abre:
    - **Path**: aponta para o `SQLMonitor.exe` compilado
      (ex: `C:\SQLMonitor\SQLMonitor.exe`).
    - **Startup directory**: a pasta onde está o `.exe`
@@ -238,13 +278,13 @@ Service Manager — gratuito, muito usado para isto):
      `SQL_MONITOR_HOST=0.0.0.0` se quiseres aceder a partir doutras
      máquinas da rede.
    - Clica "Install service".
-4. O serviço "SQLMonitor" já aparece em `services.msc`, com arranque
+3. O serviço "SQLMonitor" já aparece em `services.msc`, com arranque
    automático. Para o iniciar já sem reiniciar o Windows:
    ```
    nssm start SQLMonitor
    ```
 
-Para parar, remover ou reconfigurar mais tarde:
+Para parar, remover ou reconfigurar mais tarde (com o script ou à mão):
 
 ```
 nssm stop SQLMonitor
@@ -254,8 +294,9 @@ nssm edit SQLMonitor
 ```
 
 Como serviço, a app não mostra nenhuma janela — para veres se está a
-funcionar, abre o browser em `http://127.0.0.1:5000` (ou consulta o
-estado do serviço em `services.msc`).
+funcionar, abre o browser em `http://127.0.0.1:5000`, consulta o estado
+do serviço em `services.msc`, ou olha para `instance/logs/sqlmonitor.log`
+(ver secção "Logs da aplicação").
 
 ## Número de versão
 
@@ -313,6 +354,7 @@ app/
   notifications.py                  # envio de email + lógica "passou a mau"
   backup.py                         # backup manual de instance/app.db
   version.py                         # lê o número de build do ficheiro VERSION
+  logging_setup.py                    # configuração do log em instance/logs/
   templates/                          # Bootstrap 5
 .githooks/
   pre-commit          # incrementa o VERSION a cada commit (ver README)
@@ -323,6 +365,7 @@ run.py             # arranque em modo de desenvolvimento
 serve.py            # arranque em modo de produção (waitress) — é este que
                      # se compila com o PyInstaller
 build.bat            # script que compila o serve.py num SQLMonitor.exe
+install_service.ps1   # script que regista/arranca o serviço do Windows (NSSM)
 requirements.txt      # dependências da app
 requirements-build.txt # dependências só para compilar (PyInstaller)
 ```

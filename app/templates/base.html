@@ -486,7 +486,53 @@
             app_version }}</div>
     </div>
 
+    <!-- Modal partilhado para ver/copiar o texto completo de uma célula
+     truncada (ex: uma query em "Queries em execução") — qualquer célula
+     com o atributo data-full-text abre isto ao ser clicada. -->
+    <div class="modal fade" id="fullTextModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="fullTextModalTitle"><i class="bi bi-code-square"></i> Texto completo
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="fullTextModalContent" class="mb-0"
+                        style="white-space: pre-wrap; word-break: break-word; font-size: .85rem;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <span id="fullTextCopyFeedback" class="text-success small me-auto" hidden><i
+                            class="bi bi-check2"></i> Copiado</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="fullTextCopyBtn"><i
+                            class="bi bi-clipboard"></i> Copiar</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh: páginas de consulta (Dashboard, Jobs, etc.) definem o
+        // bloco Jinja "auto_refresh" como true para recarregarem sozinhas
+        // a cada 5 min enquanto estiverem abertas — nunca em páginas com
+        // formulários (login, Definições, editar Custom Check), onde isso
+        // interromperia o que estivesses a escrever.
+        //
+        // Dois cuidados: só recarrega com o separador visível (senão fica em
+        // espera até voltares a olhar para ele — evita gastar consultas ao SQL
+        // à toa com o separador em segundo plano) e nunca com um modal aberto
+        // (ex: a ver o texto de uma query), para não to fechar de repente.
+        if ({% block auto_refresh %}false{% endblock %}) {
+            const AUTO_REFRESH_MS = 5 * 60 * 1000;
+            setInterval(function () {
+                if (document.hidden) return;
+                if (document.querySelector(".modal.show")) return;
+                location.reload();
+            }, AUTO_REFRESH_MS);
+        }
+    </script>
     <script>
         // Paginação genérica no browser para tabelas grandes: qualquer <table>
         // com o atributo data-page-size="N" fica automaticamente paginada a N
@@ -611,6 +657,42 @@
             const nowHidden = !target.hidden;
             target.hidden = nowHidden;
             btn.textContent = nowHidden ? "Mais informações" : "Ocultar detalhes";
+        });
+
+        // Clicar numa célula truncada (ex: uma query em "Queries em execução")
+        // com o atributo data-full-text abre o modal partilhado com o texto
+        // completo, pronto a copiar. O texto vem sempre de um atributo HTML
+        // normal (autoescapado pelo Jinja), nunca interpolado dentro de JS —
+        // evita o mesmo problema de aspas já resolvido noutros sítios (ver
+        // exportação CSV e data-confirm acima).
+        document.addEventListener("click", function (e) {
+            const cell = e.target.closest("[data-full-text]");
+            if (!cell) return;
+            const modalEl = document.getElementById("fullTextModal");
+            document.getElementById("fullTextModalTitle").innerHTML =
+                '<i class="bi bi-code-square"></i> ' + (cell.getAttribute("data-full-text-title") || "Texto completo");
+            document.getElementById("fullTextModalContent").textContent = cell.getAttribute("data-full-text");
+            document.getElementById("fullTextCopyFeedback").hidden = true;
+            new bootstrap.Modal(modalEl).show();
+        });
+
+        document.getElementById("fullTextCopyBtn").addEventListener("click", async function () {
+            const text = document.getElementById("fullTextModalContent").textContent;
+            const feedback = document.getElementById("fullTextCopyFeedback");
+            try {
+                await navigator.clipboard.writeText(text);
+            } catch (err) {
+                // Sem permissão/API de clipboard (ex: ligação sem HTTPS) — como
+                // recurso, seleciona o texto para copiares manualmente (Ctrl+C).
+                const range = document.createRange();
+                range.selectNodeContents(document.getElementById("fullTextModalContent"));
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return;
+            }
+            feedback.hidden = false;
+            setTimeout(() => { feedback.hidden = true; }, 1500);
         });
     </script>
     {% block scripts %}{% endblock %}

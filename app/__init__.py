@@ -164,6 +164,10 @@ def create_app():
 
     os.makedirs(app.instance_path, exist_ok=True)
 
+    from app.logging_setup import setup_logging
+
+    logger = setup_logging(app)
+
     app.config.from_mapping(
         SECRET_KEY=_get_or_create_secret_key(app.instance_path),
         SQLALCHEMY_DATABASE_URI="sqlite:///"
@@ -220,6 +224,8 @@ def create_app():
     from app.cli import register_cli
 
     register_cli(app)
+
+    logger.info("SQL Monitor (versão %s) arrancado.", app_version)
 
     from flask_wtf.csrf import CSRFError
 

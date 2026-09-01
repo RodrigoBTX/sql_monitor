@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Queries - SQL Monitor{% endblock %}
+{% block auto_refresh %}true{% endblock %}
 {% block content %}
 <div class="page-header">
     <div>
@@ -49,8 +50,9 @@
                     <td>{{ r.wait_type or "-" }}</td>
                     <td>{{ r.total_elapsed_time }}</td>
                     <td>{{ r.cpu_time }}</td>
-                    <td class="text-truncate text-truncate-cell" style="max-width: 400px;" title="{{ r.query_text }}">{{
-                        r.query_text }}</td>
+                    <td class="text-truncate text-truncate-cell" style="max-width: 400px; cursor: pointer;"
+                        data-full-text="{{ r.query_text }}" data-full-text-title="Texto da query"
+                        title="clique para ver o texto completo">{{ r.query_text }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

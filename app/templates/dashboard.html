@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - SQL Monitor{% endblock %}
+{% block auto_refresh %}true{% endblock %}
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -131,14 +132,50 @@
     </div>
 </div>
 
+{% if deadlocks_recent is not none %}
+<div class="section-label">Diagnóstico</div>
+<div class="row g-3">
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.deadlocks') }}"
+            class="tile {{ 'tile-bad' if deadlocks_recent else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-exclamation-octagon"></i></div>
+            <div>
+                <div class="tile-value">{{ deadlocks_recent }}</div>
+                <div class="tile-label">Deadlocks recentes</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.index_health') }}"
+            class="tile {{ 'tile-bad' if index_fragmented else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-diagram-3"></i></div>
+            <div>
+                <div class="tile-value">{{ index_fragmented }}</div>
+                <div class="tile-label">Índices fragmentados</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <a href="{{ url_for('monitoring.capacity') }}" class="tile {{ 'tile-bad' if memory_pressure else 'tile-ok' }}">
+            <div class="tile-icon"><i class="bi bi-cpu"></i></div>
+            <div>
+                <div class="tile-value">{{ "Sim" if memory_pressure else "Não" }}</div>
+                <div class="tile-label">Memória sob pressão</div>
+            </div>
+            <i class="bi bi-chevron-right tile-arrow"></i>
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <div class="section-label">Mais</div>
 <div class="d-flex flex-wrap gap-2">
     <a href="{{ url_for('monitoring.query_store') }}" class="link-pill"><i class="bi bi-graph-up-arrow"></i> Query
         Store</a>
     <a href="{{ url_for('trends.index') }}" class="link-pill"><i class="bi bi-graph-up"></i> Tendências</a>
-    <a href="{{ url_for('monitoring.index_health') }}" class="link-pill"><i class="bi bi-diagram-3"></i> Índices</a>
-    <a href="{{ url_for('monitoring.deadlocks') }}" class="link-pill"><i class="bi bi-exclamation-octagon"></i>
-        Deadlocks</a>
+    <a href="{{ url_for('monitoring.capacity') }}" class="link-pill"><i class="bi bi-hdd"></i> Capacidade</a>
 </div>
 {% endif %}
 {% endblock %}
