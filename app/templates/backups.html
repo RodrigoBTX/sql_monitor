@@ -20,7 +20,7 @@
 </div>
 
 {% if error %}
-<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% include "_error_box.html" %}
 {% elif not rows %}
 <div class="empty-state"><i class="bi bi-inboxes"></i>Sem dados ou sem ligação ativa.</div>
 {% else %}

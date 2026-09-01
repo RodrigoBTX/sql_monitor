@@ -73,6 +73,11 @@ def _migrate_sqlite_schema(engine):
         "custom_check": {
             "comparison": "VARCHAR(5) DEFAULT 'gt'",
         },
+        "profile": {
+            "notify_enabled": "BOOLEAN DEFAULT 0",
+            "notify_email": "VARCHAR(255)",
+            "notify_last_state": "BOOLEAN DEFAULT 0",
+        },
     }
     with engine.connect() as conn:
         # A coluna "query" do custom_check foi renomeada para "sql_query"
@@ -170,6 +175,18 @@ def create_app():
     login_manager.init_app(app)
     csrf.init_app(app)
 
+    from app.sql_client import friendly_connection_error
+
+    app.jinja_env.filters["friendly_error"] = friendly_connection_error
+
+    from app.version import get_app_version
+
+    app_version = get_app_version()
+
+    @app.context_processor
+    def inject_version():
+        return {"app_version": app_version}
+
     from app.models import User
 
     @login_manager.user_loader
@@ -256,6 +273,11 @@ def create_app():
             "profiles.delete",
             "profiles.rename",
             "profiles.set_primary",
+            # O backup é da base de dados inteira (todos os perfis), e a
+            # configuração de email (SMTP) também é global — nenhum dos
+            # dois depende de o perfil atual já ter uma ligação configurada.
+            "settings.backup_download",
+            "settings.smtp_save",
         }
         if (
             request.endpoint

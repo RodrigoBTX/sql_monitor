@@ -40,6 +40,49 @@ class Profile(db.Model):
     # tempo nem a acumular histórico (e espaço em disco) de todos.
     is_snapshot_primary = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Notificações por email — independentes do perfil ser ou não o
+    # "principal para histórico". Cada perfil decide para si próprio se
+    # quer avisos e para que email, mas todos usam o mesmo servidor de
+    # envio (SMTP), configurado uma única vez em AppSetting.
+    notify_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    notify_email = db.Column(db.String(255))
+    # Estado do último check (True = havia algo mau) — usado só para saber
+    # se algo "passou a mau" agora (e por isso vale a pena enviar email) ou
+    # se já estava mau e por isso não vale repetir o aviso.
+    notify_last_state = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class AppSetting(db.Model):
+    """Configuração global da app (não pertence a nenhum perfil em
+    concreto) — para já, só os dados do servidor de email (SMTP) usado
+    para enviar notificações. Existe sempre uma única linha (singleton),
+    criada automaticamente na primeira vez que é precisa — ver
+    app.notifications.get_app_settings()."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    smtp_host = db.Column(db.String(255))
+    smtp_port = db.Column(db.Integer, default=587)
+    smtp_username = db.Column(db.String(255))
+    smtp_password_encrypted = db.Column(db.String(500))
+    smtp_use_tls = db.Column(db.Boolean, default=True)
+    smtp_from_address = db.Column(db.String(255))
+
+    @property
+    def smtp_password(self):
+        return (
+            decrypt(self.smtp_password_encrypted)
+            if self.smtp_password_encrypted
+            else ""
+        )
+
+    @smtp_password.setter
+    def smtp_password(self, raw_password):
+        self.smtp_password_encrypted = encrypt(raw_password) if raw_password else ""
+
+    @property
+    def is_configured(self):
+        return bool(self.smtp_host and self.smtp_from_address)
+
 
 class SqlConnection(db.Model):
     """Dados de ligação à instância SQL Server de UM perfil (ver Profile)."""

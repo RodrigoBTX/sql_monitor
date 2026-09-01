@@ -8,13 +8,25 @@ De propósito, só grava snapshots do perfil marcado como "principal para
 histórico" (Profile.is_snapshot_primary) — mesmo que tenhas vários perfis
 configurados, isto mantém o processo em segundo plano leve: nunca bate em
 mais do que um SQL Server de cada vez, e o histórico/espaço em disco não
-cresce proporcionalmente ao número de perfis que tiveres."""
+cresce proporcionalmente ao número de perfis que tiveres.
+
+setup_scheduler() também arranca, no mesmo scheduler em segundo plano, a
+verificação periódica das notificações por email (ver
+app/notifications.py) — essa sim corre para todos os perfis que tiverem
+notificações ativadas, independentemente de qual é o principal."""
 
 import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 _scheduler = None
+
+# Snapshots com mais de 30 dias são apagados automaticamente a cada captura
+# (ver capture_snapshot). 30 dias porque é também a maior janela que a
+# página de Tendências mostra ("Últimos 30 dias") — não faz sentido guardar
+# histórico que a app já não consegue mostrar em lado nenhum, e mantém a
+# tabela pequena e leve indefinidamente, como pedido.
+SNAPSHOT_RETENTION_DAYS = 30
 
 
 def _get_primary_profile():
@@ -52,6 +64,18 @@ def capture_snapshot(app):
             had_error=bool(summary.get("error")),
         )
         db.session.add(snap)
+
+        # Limpeza dos snapshots antigos deste perfil (mais de
+        # SNAPSHOT_RETENTION_DAYS dias) — corre aqui, "de carona" na mesma
+        # captura periódica, para não precisar de outro job/scheduler à parte.
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+            days=SNAPSHOT_RETENTION_DAYS
+        )
+        MetricSnapshot.query.filter(
+            MetricSnapshot.profile_id == profile.id,
+            MetricSnapshot.taken_at < cutoff,
+        ).delete(synchronize_session=False)
+
         db.session.commit()
 
 
@@ -85,4 +109,21 @@ def setup_scheduler(app):
         # se está a funcionar. Os seguintes já seguem o intervalo normal.
         next_run_time=datetime.datetime.now(),
     )
+
+    # Verificação para notificações por email — independente do perfil
+    # principal para histórico (ver app/notifications.py): corre para
+    # qualquer perfil que tenha notify_enabled=True, com um intervalo fixo
+    # próprio, mais espaçado que os snapshots porque não precisa da mesma
+    # granularidade.
+    from app.notifications import check_and_notify, CHECK_INTERVAL_MINUTES
+
+    _scheduler.add_job(
+        lambda: check_and_notify(app),
+        "interval",
+        minutes=CHECK_INTERVAL_MINUTES,
+        id="notification_check",
+        replace_existing=True,
+        next_run_time=datetime.datetime.now(),
+    )
+
     _scheduler.start()

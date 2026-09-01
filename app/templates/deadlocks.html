@@ -16,7 +16,7 @@
 </div>
 
 {% if error %}
-<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% include "_error_box.html" %}
 {% elif not rows %}
 <div class="empty-state state-ok"><i class="bi bi-check-circle"></i>Sem deadlocks registados recentemente.</div>
 {% else %}

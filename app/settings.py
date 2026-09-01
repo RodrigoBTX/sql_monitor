@@ -1,9 +1,24 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash
+import datetime
+import os
+
+from flask import (
+    Blueprint,
+    render_template,
+    redirect,
+    url_for,
+    request,
+    flash,
+    send_file,
+    current_app,
+    after_this_request,
+)
 from flask_login import login_required
 from app import db
 from app.models import SqlConnection, Profile
 from app.profiles import get_active_profile
 from app.sql_client import test_connection
+from app.backup import create_backup_copy, get_last_backup_at
+from app.notifications import get_app_settings, send_email, NotificationError
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -40,6 +55,18 @@ def _fill_from_form(conn: SqlConnection, profile: Profile):
     conn.backup_stale_days = _int_field("backup_stale_days", 7)
     conn.snapshot_interval_minutes = _int_field("snapshot_interval_minutes", 15)
 
+    # Notificações por email deste perfil (o servidor de envio em si é
+    # global — ver AppSetting / _fill_smtp_from_form).
+    was_enabled = profile.notify_enabled
+    profile.notify_enabled = bool(request.form.get("notify_enabled"))
+    profile.notify_email = request.form.get("notify_email", "").strip()
+    if profile.notify_enabled != was_enabled:
+        # Ao ligar/desligar as notificações, reinicia o estado de "já
+        # avisei" — para a próxima verificação, depois de reativares,
+        # decidir de novo a partir do estado real da instância, em vez de
+        # ficar presa a um estado antigo de quando estava desligado.
+        profile.notify_last_state = False
+
 
 @bp.route("/setup", methods=["GET", "POST"])
 @login_required
@@ -69,9 +96,87 @@ def setup():
                 ),
                 "success" if ok else "danger",
             )
-            return render_template("settings.html", conn=conn, profile=profile)
+            return render_template(
+                "settings.html",
+                conn=conn,
+                profile=profile,
+                last_backup_at=get_last_backup_at(current_app),
+                smtp_settings=get_app_settings(),
+            )
 
         flash("Configuração guardada.", "success")
         return redirect(url_for("dashboard.index"))
 
-    return render_template("settings.html", conn=conn, profile=profile)
+    return render_template(
+        "settings.html",
+        conn=conn,
+        profile=profile,
+        last_backup_at=get_last_backup_at(current_app),
+        smtp_settings=get_app_settings(),
+    )
+
+
+def _fill_smtp_from_form(settings):
+    settings.smtp_host = request.form.get("smtp_host", "").strip()
+    settings.smtp_port = int(request.form.get("smtp_port") or 587)
+    settings.smtp_username = request.form.get("smtp_username", "").strip()
+    new_password = request.form.get("smtp_password", "")
+    if new_password:
+        settings.smtp_password = new_password
+    settings.smtp_use_tls = bool(request.form.get("smtp_use_tls"))
+    settings.smtp_from_address = request.form.get("smtp_from_address", "").strip()
+
+
+@bp.route("/smtp", methods=["POST"])
+@login_required
+def smtp_save():
+    """Configuração do servidor de email (SMTP) usado para enviar as
+    notificações — é global (não pertence a nenhum perfil), porque
+    normalmente só faz sentido teres uma conta/servidor de envio."""
+    settings = get_app_settings()
+    _fill_smtp_from_form(settings)
+    db.session.commit()
+
+    if request.form.get("action") == "test":
+        to_address = request.form.get("smtp_test_to", "").strip()
+        if not to_address:
+            flash("Indica um email de destino para o teste.", "danger")
+        else:
+            try:
+                send_email(
+                    settings,
+                    to_address,
+                    "[SQL Monitor] Email de teste",
+                    "Se estás a ler isto, a configuração de email do SQL Monitor está a funcionar.",
+                )
+                flash(f"Email de teste enviado para {to_address}.", "success")
+            except NotificationError as e:
+                flash(f"Falha ao enviar o email de teste: {e}", "danger")
+    else:
+        flash("Configuração de email guardada.", "success")
+
+    return redirect(url_for("settings.setup"))
+
+
+@bp.route("/backup", methods=["POST"])
+@login_required
+def backup_download():
+    """Gera uma cópia da base de dados local (instance/app.db) e devolve-a
+    como download. É sempre manual — não há nada agendado/automático aqui."""
+    tmp_path = create_backup_copy(current_app)
+    filename = f"sql_monitor_backup_{datetime.datetime.now():%Y%m%d_%H%M%S}.db"
+
+    @after_this_request
+    def _cleanup(response):
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        return response
+
+    return send_file(
+        tmp_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/octet-stream",
+    )

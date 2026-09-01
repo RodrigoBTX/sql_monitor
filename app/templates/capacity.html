@@ -10,7 +10,7 @@
 </div>
 
 {% if error %}
-<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% include "_error_box.html" %}
 {% else %}
 
 <div class="section-label mt-0">Memória</div>

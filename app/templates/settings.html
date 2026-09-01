@@ -81,6 +81,96 @@
             </div>
         </div>
 
+        <div class="card shadow-sm mb-3" style="border-color: var(--border); border-radius: .85rem;">
+            <div class="card-body p-4">
+                <h5 class="mb-1"><i class="bi bi-shield-check text-primary"></i> Backup da base de dados local</h5>
+                <p class="text-muted small mb-3">
+                    Guarda uma cópia de <code>instance/app.db</code> — perfis, ligações, Custom Checks e histórico
+                    de todos os perfis desta instalação. É sempre manual, feito quando tu decidires; nada disto
+                    corre sozinho em segundo plano.
+                </p>
+                <p class="mb-3">
+                    {% if last_backup_at %}
+                    Último backup: <strong>{{ last_backup_at.strftime("%d/%m/%Y %H:%M") }}</strong>
+                    {% else %}
+                    <span class="text-muted">Ainda não foi feito nenhum backup nesta instalação.</span>
+                    {% endif %}
+                </p>
+                <form method="post" action="{{ url_for('settings.backup_download') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-download"></i> Fazer backup agora
+                    </button>
+                </form>
+                <p class="text-muted small mt-2 mb-0">
+                    O browser trata da transferência: se tiveres a opção "perguntar onde guardar cada ficheiro"
+                    ativa nas definições dele, vai perguntar-te a pasta; caso contrário, guarda automaticamente
+                    na pasta de transferências por omissão.
+                </p>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-3" style="border-color: var(--border); border-radius: .85rem;">
+            <div class="card-body p-4">
+                <h5 class="mb-1"><i class="bi bi-envelope-at text-primary"></i> Servidor de email (SMTP)</h5>
+                <p class="text-muted small mb-3">
+                    Usado para enviar as notificações (ver mais abaixo, em cada perfil). É uma configuração
+                    única, partilhada por todos os perfis desta instalação — normalmente só faz sentido teres
+                    uma conta/servidor de envio.
+                </p>
+                <form method="post" action="{{ url_for('settings.smtp_save') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small">Servidor SMTP</label>
+                            <input type="text" name="smtp_host" class="form-control form-control-sm"
+                                value="{{ smtp_settings.smtp_host or '' }}" placeholder="Ex: smtp.aempresa.pt">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Porta</label>
+                            <input type="number" name="smtp_port" class="form-control form-control-sm"
+                                value="{{ smtp_settings.smtp_port or 587 }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Utilizador</label>
+                            <input type="text" name="smtp_username" class="form-control form-control-sm"
+                                value="{{ smtp_settings.smtp_username or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Password</label>
+                            <input type="password" name="smtp_password" class="form-control form-control-sm"
+                                placeholder="{% if smtp_settings.smtp_password_encrypted %}(sem alterações){% endif %}">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small">Email de origem (From)</label>
+                            <input type="email" name="smtp_from_address" class="form-control form-control-sm"
+                                value="{{ smtp_settings.smtp_from_address or '' }}"
+                                placeholder="Ex: sqlmonitor@aempresa.pt">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="smtp_use_tls" id="smtpTls" {% if
+                                    not smtp_settings.id or smtp_settings.smtp_use_tls %}checked{% endif %}>
+                                <label class="form-check-label small" for="smtpTls">Usar TLS</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 align-items-center mt-3">
+                        <button type="submit" name="action" value="save" class="btn btn-sm btn-primary">
+                            <i class="bi bi-check2"></i> Guardar
+                        </button>
+                        <span class="text-muted small">ou testar já para:</span>
+                        <input type="email" name="smtp_test_to" class="form-control form-control-sm"
+                            style="max-width: 220px;" placeholder="email@exemplo.com">
+                        <button type="submit" name="action" value="test" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-send"></i> Enviar teste
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div class="card shadow-sm" style="border-color: var(--border); border-radius: .85rem;">
             <div class="card-body p-4">
                 <h5 class="mb-1"><i class="bi bi-gear text-primary"></i> Ligação à instância SQL Server</h5>
@@ -177,6 +267,28 @@
                                 value="{{ conn.snapshot_interval_minutes if conn and conn.snapshot_interval_minutes else 15 }}">
                             <div class="form-text">Só tem efeito se este for o perfil principal para histórico. É
                                 preciso reiniciar a app para o valor ter efeito.</div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="mb-1"><i class="bi bi-envelope text-primary"></i> Notificações por email</h6>
+                    <p class="text-muted small mb-3">
+                        Envia um email para este perfil sempre que algo passa a estar mau (não repete enquanto
+                        continuar por resolver). Precisa do servidor de email configurado acima.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="notify_enabled" id="notifyEnabled"
+                                    {% if profile.notify_enabled %}checked{% endif %}>
+                                <label class="form-check-label" for="notifyEnabled">Ativar notificações para este
+                                    perfil</label>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small">Email para onde enviar o aviso</label>
+                            <input type="email" name="notify_email" class="form-control"
+                                value="{{ profile.notify_email or '' }}" placeholder="ex: rodrigo@aempresa.pt">
                         </div>
                     </div>
 

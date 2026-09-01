@@ -21,8 +21,12 @@
 </div>
 {% elif summary.error %}
 <div class="alert alert-danger">
-    <strong>Não foi possível ligar à instância:</strong> {{ summary.error }}
-    <br><a href="{{ url_for('settings.setup') }}" class="alert-link">Rever definições de ligação</a>.
+    <strong>Não foi possível ligar à instância:</strong> {{ summary.error|friendly_error }}
+    <br><a href="{{ url_for('settings.setup') }}" class="alert-link">Rever definições de ligação</a>
+    &middot;
+    <button type="button" class="error-details-toggle" data-toggle-details="conn-error-details">Mais
+        informações</button>
+    <pre class="error-details" id="conn-error-details" hidden>{{ summary.error }}</pre>
 </div>
 {% else %}
 {% set total_problems = summary.jobs_failed + summary.jobs_stuck + summary.sessions_blocked

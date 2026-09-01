@@ -15,7 +15,7 @@
 </div>
 
 {% if error %}
-<div class="empty-state state-bad"><i class="bi bi-exclamation-triangle"></i>{{ error }}</div>
+{% include "_error_box.html" %}
 {% elif not status %}
 <div class="empty-state"><i class="bi bi-plug"></i>Sem ligação configurada.</div>
 {% elif not status.enabled %}

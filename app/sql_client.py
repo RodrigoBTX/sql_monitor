@@ -15,6 +15,70 @@ class SqlClientError(Exception):
     pass
 
 
+# Pares (fragmentos a procurar no erro técnico, em minúsculas) -> frase
+# simples a mostrar em destaque. O erro técnico completo (pyodbc/ODBC)
+# continua sempre disponível, sem tradução, atrás do botão "Mais
+# informações" nas páginas — isto é só para dar uma primeira leitura
+# rápida do que se passou, sem teres de decifrar o texto do driver ODBC.
+_FRIENDLY_ERROR_PATTERNS = [
+    (
+        (
+            "wait operation timed out",
+            "login timeout expired",
+            "server is not found",
+            "server is not accessible",
+            "network-related",
+            "target machine actively refused",
+            "no connection could be made",
+        ),
+        "Não foi possível chegar à instância SQL Server. Verifica se está "
+        "acessível na rede a partir deste computador (ex: VPN ligada) e se "
+        "o SQL Server está configurado para aceitar ligações remotas.",
+    ),
+    (
+        ("login failed for user",),
+        "Falha de autenticação — confirma o utilizador e a password nas Definições.",
+    ),
+    (
+        ("cannot open database", "database ... does not exist", "invalid object name"),
+        "Não foi possível abrir a base de dados indicada — confirma o nome "
+        "nas Definições.",
+    ),
+    (
+        ("ssl provider", "certificate chain", "certificate verify failed"),
+        "Problema com o certificado SSL do servidor — experimenta ativar "
+        '"Confiar no certificado do servidor" nas Definições.',
+    ),
+    (
+        (
+            "permission was denied",
+            "the server principal",
+            "view server state permission",
+        ),
+        "O login usado não tem permissões suficientes para esta consulta "
+        '(falta "VIEW SERVER STATE" ou acesso à base de dados).',
+    ),
+    (
+        ("timeout expired", "timeout"),
+        "A instância demorou demasiado tempo a responder (timeout).",
+    ),
+]
+
+
+def friendly_connection_error(raw_error):
+    """Traduz o erro técnico (pyodbc/ODBC) mais comum para uma frase curta
+    e compreensível. Se não reconhecer o padrão, devolve uma mensagem
+    genérica — o texto original nunca é perdido, fica sempre disponível
+    à parte (ver templates: botão "Mais informações")."""
+    if not raw_error:
+        return "Erro desconhecido."
+    lower = str(raw_error).lower()
+    for needles, friendly in _FRIENDLY_ERROR_PATTERNS:
+        if any(n in lower for n in needles):
+            return friendly
+    return "Não foi possível ligar à instância ou executar a consulta."
+
+
 # O pyodbc não sabe descodificar o tipo DATETIMEOFFSET do SQL Server (ODBC
 # SQL type -155) por omissão — é usado em várias colunas da Query Store
 # (ex: rsi.start_time, sys.query_store_plan.last_execution_time). Sem este

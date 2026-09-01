@@ -15,6 +15,7 @@ if not exist serve.py (
 pyinstaller --noconfirm --onefile --name SQLMonitor ^
   --icon "assets\sqlmonitor.ico" ^
   --add-data "app\templates;app\templates" ^
+  --add-data "VERSION;." ^
   --hidden-import apscheduler.triggers.interval ^
   --hidden-import apscheduler.triggers.date ^
   --hidden-import apscheduler.executors.pool ^

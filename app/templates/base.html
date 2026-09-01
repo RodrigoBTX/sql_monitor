@@ -292,6 +292,37 @@
             opacity: 1;
         }
 
+        /* Erro de ligação/consulta: mensagem simples + detalhe técnico
+           escondido atrás de "Mais informações", para não assustar com o
+           texto do driver ODBC logo à primeira vista. */
+        .error-details-toggle {
+            font-size: .82rem;
+            color: inherit;
+            text-decoration: underline;
+            background: none;
+            border: none;
+            padding: 0;
+            margin-top: .5rem;
+            cursor: pointer;
+        }
+
+        .error-details-toggle:hover {
+            opacity: .8;
+        }
+
+        .error-details {
+            text-align: left;
+            font-size: .78rem;
+            margin-top: .6rem;
+            padding: .6rem .75rem;
+            background: rgba(0, 0, 0, .05);
+            border-radius: .5rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
         /* Chart containers */
         .chart-card {
             background: var(--card-bg);
@@ -450,6 +481,9 @@
         {% endwith %}
 
         {% block content %}{% endblock %}
+
+        <div class="text-center text-muted small mt-4 mb-2" style="opacity: .55;">SQL Monitor &middot; build {{
+            app_version }}</div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -563,6 +597,20 @@
             if (msg && !confirm(msg)) {
                 e.preventDefault();
             }
+        });
+
+        // Botão "Mais informações" / "Ocultar detalhes" nos avisos de erro de
+        // ligação — mostra/esconde o texto técnico completo (ver
+        // _error_box.html). Também via data-* + listener delegado, pelo mesmo
+        // motivo dos outros acima.
+        document.addEventListener("click", function (e) {
+            const btn = e.target.closest("[data-toggle-details]");
+            if (!btn) return;
+            const target = document.getElementById(btn.getAttribute("data-toggle-details"));
+            if (!target) return;
+            const nowHidden = !target.hidden;
+            target.hidden = nowHidden;
+            btn.textContent = nowHidden ? "Mais informações" : "Ocultar detalhes";
         });
     </script>
     {% block scripts %}{% endblock %}

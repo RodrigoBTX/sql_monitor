@@ -82,6 +82,46 @@ Server (por exemplo, vários clientes) a partir da mesma instalação:
   funcionar normalmente (dashboard, alertas, custom checks), só não
   acumulam histórico no separador "Tendências".
 
+## Histórico de tendências — limpeza automática
+
+Os snapshots gravados em segundo plano para a página "Tendências" são
+mantidos durante **30 dias**; mais antigos que isso são apagados
+automaticamente a cada nova captura. É o mesmo período da maior janela
+que a própria página mostra ("Últimos 30 dias"), por isso nunca perdes
+histórico que ainda consigas ver ali — só evita que a base de dados
+cresça para sempre.
+
+## Backup da base de dados local
+
+Nas Definições há uma secção "Backup da base de dados local", com a data
+do último backup feito e um botão **"Fazer backup agora"**. É sempre
+manual — nada é feito automaticamente. Ao clicar, a app gera uma cópia
+consistente de `instance/app.db` (perfis, ligações, custom checks e
+histórico) e entrega-a ao browser como download; se tiveres a opção
+"perguntar onde guardar cada ficheiro" ativa nas definições do teu
+browser, ele pergunta-te a pasta — caso contrário, guarda na pasta de
+Transferências por omissão.
+
+## Notificações por email
+
+Nas Definições há duas partes para isto:
+
+1. **Servidor de email (SMTP)** — configuração única, partilhada por
+   todos os perfis (normalmente só faz sentido teres uma conta/servidor a
+   enviar). Preenche o servidor, porta, utilizador/password e o email de
+   origem, e usa o botão "Enviar teste" para confirmares que está tudo
+   certo antes de depender disto.
+2. **Notificações por email**, dentro da configuração de cada perfil —
+   ativa o interruptor e indica o email de destino desse perfil. Cada
+   perfil tem o seu próprio interruptor e o seu próprio email (podem ser
+   diferentes clientes/pessoas).
+
+Só chega um email quando algo **passa** a estar mau (ex: um job começa a
+falhar) — enquanto continuar por resolver, não repete o aviso. Quando
+ficar resolvido e voltar a acontecer, avisa de novo. Isto corre em
+segundo plano a cada 10 minutos, só para os perfis que tiverem
+notificações ativas — os restantes nunca são tocados por este processo.
+
 ## Custom Checks — só leitura
 
 Os **Custom Checks** só aceitam queries de leitura (`SELECT`, com CTEs via
@@ -115,8 +155,9 @@ ecrã. Se o utilizador indicado não existir, é criado.
 ## Onde ficam guardados os dados
 
 - `instance/app.db` — base de dados SQLite local: utilizadores, perfis,
-  ligações SQL (password encriptada), custom checks e histórico de
-  tendências.
+  ligações SQL (password encriptada), custom checks, histórico de
+  tendências e a configuração do servidor de email (a password também
+  encriptada).
 - `instance/secret.key` — chave de encriptação gerada automaticamente no
   primeiro arranque. **Não apagar nem partilhar este ficheiro.**
 - `instance/secret_key` — chave usada para assinar o cookie de sessão
@@ -124,6 +165,9 @@ ecrã. Se o utilizador indicado não existir, é criado.
   automaticamente no primeiro arranque. **Não apagar nem partilhar.** Se
   for apagada, é gerada uma nova e todas as sessões com sessão iniciada
   nesse momento são invalidadas (é preciso voltar a fazer login).
+- `instance/last_backup.txt` — só a data/hora do último backup manual
+  feito (ver secção "Backup da base de dados local"), para aparecer nas
+  Definições. Não tem informação sensível.
 
 A pasta `instance/` fica sempre ao lado do `run.py`/`serve.py` (ou, numa
 instalação compilada, ao lado do `.exe`) — nunca é preciso ires à procura
@@ -213,6 +257,28 @@ Como serviço, a app não mostra nenhuma janela — para veres se está a
 funcionar, abre o browser em `http://127.0.0.1:5000` (ou consulta o
 estado do serviço em `services.msc`).
 
+## Número de versão
+
+A app mostra um número de "build" discreto no rodapé de todas as páginas
+(ex: "SQL Monitor · build 7") — útil quando dás suporte remoto a uma
+instalação de cliente e precisas de saber rapidamente que versão está lá
+instalada, sem ires ver o código.
+
+Esse número vive no ficheiro `VERSION`, na raiz do projeto, e **incrementa
+sozinho a cada commit** através de um hook do Git incluído no repositório
+(`.githooks/pre-commit`). Só precisas de ativar isto **uma vez**, em cada
+PC onde tenhas o repositório clonado:
+
+```bash
+cd sql_monitor
+git config core.hooksPath .githooks
+```
+
+A partir daí, sempre que fizeres `git commit`, o número em `VERSION`
+sobe automaticamente e essa alteração entra nesse mesmo commit — não
+precisas de fazer mais nada. Se fizeres vários commits antes de um único
+`git push`, o número sobe uma vez por commit (não por push).
+
 ## O que é a proteção CSRF
 
 Todos os formulários da app (login, definições, custom checks) incluem
@@ -242,8 +308,17 @@ app/
   custom_checks.py               # checks personalizados às tabelas de negócio
   trends.py                       # histórico/gráficos de tendências
   snapshot.py                      # captura periódica de snapshots (só do
-                                    # perfil principal)
-  templates/                       # Bootstrap 5
+                                    # perfil principal) + limpeza automática +
+                                    # arranca a verificação de notificações
+  notifications.py                  # envio de email + lógica "passou a mau"
+  backup.py                         # backup manual de instance/app.db
+  version.py                         # lê o número de build do ficheiro VERSION
+  templates/                          # Bootstrap 5
+.githooks/
+  pre-commit          # incrementa o VERSION a cada commit (ver README)
+assets/
+  sqlmonitor.ico       # ícone usado na compilação para .exe
+VERSION                 # número de build atual (não editar à mão)
 run.py             # arranque em modo de desenvolvimento
 serve.py            # arranque em modo de produção (waitress) — é este que
                      # se compila com o PyInstaller
@@ -254,4 +329,4 @@ requirements-build.txt # dependências só para compilar (PyInstaller)
 
 ---
 
-Rodrigo BTX — 31 de agosto de 2026
+Rodrigo BTX — 1 de setembro de 2026

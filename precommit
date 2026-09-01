@@ -1,0 +1,26 @@
+#!/bin/sh
+# Incrementa automaticamente o numero de build guardado no ficheiro
+# VERSION, sempre que fazes um commit — e inclui essa alteracao no proprio
+# commit. E' assim que a app sabe dizer "build N" no rodape/Definicoes,
+# util para saberes que versao esta instalada num PC/servidor de cliente
+# quando compilares e distribuires o .exe.
+#
+# Para ativar isto (uma unica vez, neste clone do repositorio):
+#   git config core.hooksPath .githooks
+#
+# Sem esse comando, o Git ignora esta pasta e o VERSION nunca muda sozinho.
+
+VERSION_FILE="VERSION"
+
+if [ ! -f "$VERSION_FILE" ]; then
+    echo "1" > "$VERSION_FILE"
+fi
+
+current=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+case "$current" in
+    ''|*[!0-9]*) current=0 ;;
+esac
+
+next=$((current + 1))
+echo "$next" > "$VERSION_FILE"
+git add "$VERSION_FILE"

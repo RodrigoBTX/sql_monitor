@@ -1,0 +1,10 @@
+{# Bloco de erro de ligação/consulta reutilizável — mensagem simples em
+   destaque, com o erro técnico completo escondido atrás de "Mais
+   informações". Uso: {% include "_error_box.html" %} numa página que
+   tenha uma variável `error` (string ou None) no contexto. #}
+<div class="empty-state state-bad">
+    <i class="bi bi-exclamation-triangle"></i>
+    <div>{{ error|friendly_error }}</div>
+    <button type="button" class="error-details-toggle" data-toggle-details="conn-error-details">Mais informações</button>
+    <pre class="error-details" id="conn-error-details" hidden>{{ error }}</pre>
+</div>
