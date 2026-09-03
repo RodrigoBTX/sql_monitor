@@ -24,6 +24,9 @@ from app.sql_client import (
     get_memory_status,
     get_index_fragmentation,
     get_recent_deadlocks,
+    get_checkdb_status,
+    get_suspect_pages,
+    get_stale_statistics,
 )
 
 bp = Blueprint("monitoring", __name__, url_prefix="/monitoring")
@@ -256,14 +259,19 @@ def capacity():
 def index_health():
     conn = _get_conn()
     database = request.args.get("db") or (conn.default_database if conn else "master")
-    rows, error = [], None
+    rows, stats_rows, error = [], [], None
     try:
         if conn:
             rows = get_index_fragmentation(conn, database)
+            stats_rows = get_stale_statistics(conn, database)
     except SqlClientError as e:
         error = str(e)
     return render_template(
-        "index_health.html", rows=rows, error=error, database=database
+        "index_health.html",
+        rows=rows,
+        stats_rows=stats_rows,
+        error=error,
+        database=database,
     )
 
 
@@ -277,3 +285,24 @@ def deadlocks():
     except SqlClientError as e:
         error = str(e)
     return render_template("deadlocks.html", rows=rows, error=error)
+
+
+@bp.route("/integrity")
+@login_required
+def integrity():
+    conn = _get_conn()
+    checkdb_rows, suspect_rows, error = [], [], None
+    try:
+        if conn:
+            checkdb_rows = get_checkdb_status(
+                conn, stale_days=conn.checkdb_stale_days or 7
+            )
+            suspect_rows = get_suspect_pages(conn)
+    except SqlClientError as e:
+        error = str(e)
+    return render_template(
+        "integrity.html",
+        checkdb_rows=checkdb_rows,
+        suspect_rows=suspect_rows,
+        error=error,
+    )

@@ -54,6 +54,7 @@ def _fill_from_form(conn: SqlConnection, profile: Profile):
     conn.disk_low_pct = _int_field("disk_low_pct", 15)
     conn.backup_stale_days = _int_field("backup_stale_days", 7)
     conn.snapshot_interval_minutes = _int_field("snapshot_interval_minutes", 15)
+    conn.checkdb_stale_days = _int_field("checkdb_stale_days", 7)
 
     # Notificações por email deste perfil (o servidor de envio em si é
     # global — ver AppSetting / _fill_smtp_from_form).

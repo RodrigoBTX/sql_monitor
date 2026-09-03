@@ -734,6 +734,144 @@ def get_recent_deadlocks(conn: SqlConnection):
 
 
 # ---------------------------------------------------------------------------
+# Corrupção — último CHECKDB conhecido por base de dados
+# ---------------------------------------------------------------------------
+
+DATABASE_LIST_QUERY = """
+SELECT name AS database_name
+FROM sys.databases
+WHERE name NOT IN ('tempdb')
+  AND state_desc = 'ONLINE'
+ORDER BY name;
+"""
+
+
+def get_checkdb_status(conn: SqlConnection, stale_days: int = 7):
+    """Para cada base de dados online, lê a data do último CHECKDB "limpo"
+    conhecido pelo motor (DBCC DBINFO) — NÃO corre um CHECKDB novo aqui
+    (é uma operação pesada, só deve correr agendada, ex: num SQL Agent
+    job); isto só relata o que o SQL Server já sabe."""
+    dbs = run_query(conn, DATABASE_LIST_QUERY, database="master")
+    results = []
+    for db_row in dbs:
+        name = db_row["database_name"]
+        last_checkdb = None
+        error = None
+        try:
+            safe_name = name.replace("'", "''")
+            info_rows = run_query(
+                conn,
+                f"DBCC DBINFO(N'{safe_name}') WITH TABLERESULTS;",
+                database=name,
+            )
+            for r in info_rows:
+                if r.get("Field") == "dbi_dbccLastKnownGood":
+                    last_checkdb = r.get("Value")
+                    break
+        except SqlClientError as e:
+            error = str(e)
+
+        age_days = None
+        never_run = True
+        if isinstance(last_checkdb, datetime.datetime) and last_checkdb.year > 1900:
+            age_days = (datetime.datetime.utcnow() - last_checkdb).days
+            never_run = False
+
+        results.append(
+            {
+                "database_name": name,
+                "last_checkdb": last_checkdb if not never_run else None,
+                "age_days": age_days,
+                "never_run": never_run,
+                "is_stale": error is not None
+                or never_run
+                or (age_days is not None and age_days > stale_days),
+                "error": error,
+            }
+        )
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Corrupção — páginas suspeitas já detetadas pelo motor
+# ---------------------------------------------------------------------------
+
+SUSPECT_PAGES_QUERY = """
+SELECT
+    sp.database_id,
+    DB_NAME(sp.database_id) AS database_name,
+    sp.file_id,
+    sp.page_id,
+    sp.event_type,
+    sp.error_count,
+    sp.last_update_date
+FROM msdb.dbo.suspect_pages sp
+ORDER BY sp.last_update_date DESC;
+"""
+
+# event_type: https://learn.microsoft.com/sql/relational-databases/system-tables/suspect-pages-transact-sql
+_SUSPECT_EVENT_LABELS = {
+    1: "Erro de E/S (823/824/829)",
+    2: "Falha de checksum",
+    3: "Página rasgada (torn page)",
+    4: "Reparado — restauro",
+    5: "Reparado — DBCC",
+    7: "Falha de checksum (memória)",
+}
+# 4 e 5 significam que já foi reparada; as restantes ainda estão por resolver.
+_SUSPECT_RESOLVED_TYPES = {4, 5}
+
+
+def get_suspect_pages(conn: SqlConnection):
+    """Páginas que o próprio SQL Server já marcou como corrompidas (via
+    verificação de checksum nas leituras/escritas normais) — não precisa
+    de nenhum CHECKDB para aparecer aqui; é o sinal mais direto que existe
+    de corrupção real de dados."""
+    rows = run_query(conn, SUSPECT_PAGES_QUERY, database="msdb")
+    for r in rows:
+        event_type = r.get("event_type")
+        r["event_label"] = _SUSPECT_EVENT_LABELS.get(event_type, f"Tipo {event_type}")
+        r["is_active"] = event_type not in _SUSPECT_RESOLVED_TYPES
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Estatísticas desatualizadas
+# ---------------------------------------------------------------------------
+
+STALE_STATISTICS_QUERY = """
+SELECT TOP 50
+    OBJECT_SCHEMA_NAME(s.object_id) AS schema_name,
+    OBJECT_NAME(s.object_id) AS table_name,
+    s.name AS stats_name,
+    sp.last_updated,
+    sp.rows,
+    sp.rows_sampled,
+    sp.modification_counter
+FROM sys.stats s
+CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) sp
+JOIN sys.tables t ON t.object_id = s.object_id
+WHERE t.is_ms_shipped = 0
+ORDER BY sp.modification_counter DESC;
+"""
+
+
+def get_stale_statistics(conn: SqlConnection, database: str, high_pct: float = 20.0):
+    """Estatísticas com uma percentagem elevada de linhas alteradas desde a
+    última atualização — sinal de que o otimizador de queries pode estar a
+    decidir planos de execução com base em dados desatualizados. Mostra as
+    50 estatísticas mais alteradas da base de dados indicada."""
+    rows = run_query(conn, STALE_STATISTICS_QUERY, database=database)
+    for r in rows:
+        rows_count = r.get("rows") or 0
+        mods = r.get("modification_counter") or 0
+        pct = (mods / rows_count * 100) if rows_count else (100.0 if mods else 0.0)
+        r["modified_pct"] = pct
+        r["is_stale"] = pct > high_pct and rows_count > 0
+    return rows
+
+
+# ---------------------------------------------------------------------------
 # Custom checks (queries de negócio definidas pelo utilizador)
 # ---------------------------------------------------------------------------
 

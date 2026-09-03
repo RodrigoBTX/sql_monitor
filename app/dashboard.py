@@ -6,6 +6,8 @@ from app.sql_client import (
     get_recent_deadlocks,
     get_index_fragmentation,
     get_memory_status,
+    get_checkdb_status,
+    get_suspect_pages,
     SqlClientError,
 )
 from app.profiles import get_active_profile
@@ -30,7 +32,7 @@ def index():
     # para não aumentar a carga das verificações em segundo plano
     # (snapshots a cada poucos minutos, notificações a cada 10 min): estas
     # três consultas só correm quando abres mesmo o dashboard.
-    deadlocks_recent = index_fragmented = None
+    deadlocks_recent = index_fragmented = integrity_alerts = None
     memory_pressure = False
     if conn and summary and not summary.get("error"):
         try:
@@ -39,6 +41,18 @@ def index():
             index_fragmented = sum(1 for r in frag_rows if r.get("is_high"))
             memory = get_memory_status(conn)
             memory_pressure = bool(memory.get("ple_low"))
+
+            # Alertas de integridade: páginas suspeitas por resolver (corrupção
+            # real já detetada pelo motor) + bases de dados com o CHECKDB
+            # atrasado ou nunca corrido — os dois sinais mais importantes de
+            # "saúde" de uma base de dados.
+            suspect_rows = get_suspect_pages(conn)
+            active_suspect = sum(1 for r in suspect_rows if r.get("is_active"))
+            checkdb_rows = get_checkdb_status(
+                conn, stale_days=conn.checkdb_stale_days or 7
+            )
+            checkdb_stale = sum(1 for r in checkdb_rows if r.get("is_stale"))
+            integrity_alerts = active_suspect + checkdb_stale
         except SqlClientError:
             # Uma falha aqui (ex: falta de permissões só para esta consulta
             # em concreto) não deve derrubar o resto do dashboard — os
@@ -52,4 +66,5 @@ def index():
         deadlocks_recent=deadlocks_recent,
         index_fragmented=index_fragmented,
         memory_pressure=memory_pressure,
+        integrity_alerts=integrity_alerts,
     )

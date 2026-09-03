@@ -122,6 +122,39 @@ ficar resolvido e voltar a acontecer, avisa de novo. Isto corre em
 segundo plano a cada 10 minutos, só para os perfis que tiverem
 notificações ativas — os restantes nunca são tocados por este processo.
 
+## Integridade dos dados (corrupção e estatísticas)
+
+A página **Saúde da instância → Integridade** junta os dois sinais mais
+diretos de que uma base de dados tem (ou pode vir a ter) um problema de
+integridade:
+
+- **Páginas suspeitas** (`msdb.dbo.suspect_pages`) — o próprio SQL Server
+  regista aqui qualquer página que tenha falhado a verificação de
+  checksum numa leitura/escrita normal. Se aparecer alguma marcada como
+  "Por resolver", é corrupção real já detetada — o mais cedo possível,
+  corre um `DBCC CHECKDB` à base de dados em causa para perceber a
+  extensão do problema.
+- **Último CHECKDB conhecido, por base de dados** — a app lê a data do
+  último CHECKDB "limpo" que o motor tem registada (via
+  `DBCC DBINFO`) e sinaliza a vermelho se estiver mais atrasado do que o
+  limiar definido nas Definições ("CHECKDB atrasado acima de", 7 dias por
+  omissão) ou se nunca tiver corrido.
+
+**Importante:** a app nunca executa um `DBCC CHECKDB` — é uma operação
+pesada (pode demorar muito tempo e consumir bastantes recursos numa base
+grande) que deve continuar agendada à parte, normalmente como um SQL
+Agent job semanal. Esta página só te avisa se esse job parou de correr,
+nunca existiu, ou se já há corrupção detetada — não substitui o job em
+si.
+
+A mesma página **Índices** (agora "Índices e estatísticas") também passou
+a mostrar as estatísticas mais desatualizadas da base de dados
+selecionada — quando muitas linhas mudaram desde a última atualização, o
+otimizador de queries pode escolher planos de execução maus com base
+nesses números antigos. Isto não substitui a manutenção normal
+(`UPDATE STATISTICS` ou a atualização automática do próprio SQL Server),
+serve para saberes rapidamente onde essa manutenção está atrasada.
+
 ## Custom Checks — só leitura
 
 Os **Custom Checks** só aceitam queries de leitura (`SELECT`, com CTEs via
@@ -134,8 +167,9 @@ principal.
 ## Exportar para CSV
 
 Nas tabelas principais (Jobs, Sessões, Queries, Backups, Índices,
-Deadlocks, Capacidade) há um botão para exportar os dados visíveis para
-`.csv`, para abrires no Excel ou partilhares.
+Estatísticas, Deadlocks, Capacidade, Integridade) há um botão para
+exportar os dados visíveis para `.csv`, para abrires no Excel ou
+partilhares.
 
 ## Esqueci-me da password de acesso à app
 

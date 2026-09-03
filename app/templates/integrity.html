@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Integridade - SQL Monitor{% endblock %}
+{% block auto_refresh %}true{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title h4"><i class="bi bi-shield-check"></i> Integridade dos dados</div>
+        <div class="page-subtitle">Corrupção detetada pelo motor e estado do último CHECKDB conhecido — a app não corre CHECKDB nem o repara, só lê o que o SQL Server já sabe.</div>
+    </div>
+</div>
+
+{% if error %}
+    {% include "_error_box.html" %}
+{% else %}
+
+<div class="section-label">Páginas suspeitas (corrupção detetada)</div>
+{% set active_suspect = suspect_rows|selectattr("is_active")|list %}
+{% if not suspect_rows %}
+    <div class="empty-state state-ok"><i class="bi bi-check-circle"></i>Sem registos em <code>msdb.dbo.suspect_pages</code> — o motor nunca detetou uma página corrompida.</div>
+{% else %}
+    {% if active_suspect %}
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <div><strong>{{ active_suspect|length }} página{{ "s" if active_suspect|length != 1 }} suspeita{{ "s" if active_suspect|length != 1 }} por resolver.</strong> Considera correr um <code>DBCC CHECKDB</code> à base de dados afetada o mais depressa possível.</div>
+        </div>
+    {% else %}
+        <div class="alert alert-success d-flex align-items-center gap-2">
+            <i class="bi bi-check-circle-fill fs-5"></i>
+            <div>Há registo de páginas suspeitas no passado, mas todas já aparecem como reparadas.</div>
+        </div>
+    {% endif %}
+    <div class="d-flex justify-content-end mb-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-export-table="suspectPagesTable" data-export-filename="paginas_suspeitas">
+            <i class="bi bi-download"></i> Exportar CSV
+        </button>
+    </div>
+    <div class="table-card mb-4">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" data-page-size="15" id="suspectPagesTable">
+                <thead>
+                    <tr>
+                        <th>Base de dados</th>
+                        <th>Ficheiro</th>
+                        <th>Página</th>
+                        <th>Tipo</th>
+                        <th>Ocorrências</th>
+                        <th>Última atualização</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in suspect_rows %}
+                    <tr class="{{ 'row-bad' if r.is_active else '' }}">
+                        <td class="fw-semibold">{{ r.database_name or r.database_id }}</td>
+                        <td>{{ r.file_id }}</td>
+                        <td>{{ r.page_id }}</td>
+                        <td>{{ r.event_label }}</td>
+                        <td>{{ r.error_count }}</td>
+                        <td>{{ r.last_update_date }}</td>
+                        <td>
+                            {% if r.is_active %}
+                                <span class="badge bg-danger">Por resolver</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Reparado</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
+<div class="section-label">Último CHECKDB conhecido, por base de dados</div>
+{% if not checkdb_rows %}
+    <div class="empty-state"><i class="bi bi-inboxes"></i>Sem dados ou sem ligação ativa.</div>
+{% else %}
+<div class="d-flex justify-content-end mb-2">
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-export-table="checkdbTable" data-export-filename="checkdb_status">
+        <i class="bi bi-download"></i> Exportar CSV
+    </button>
+</div>
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover" data-page-size="15" id="checkdbTable">
+            <thead>
+                <tr>
+                    <th>Base de dados</th>
+                    <th>Último CHECKDB limpo</th>
+                    <th>Idade (dias)</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in checkdb_rows %}
+                <tr class="{{ 'row-bad' if r.is_stale else '' }}">
+                    <td class="fw-semibold">{{ r.database_name }}</td>
+                    <td>{{ r.last_checkdb or "-" }}</td>
+                    <td>{{ r.age_days if r.age_days is not none else "-" }}</td>
+                    <td>
+                        {% if r.error %}
+                            <span class="badge bg-secondary" title="{{ r.error }}">Não foi possível ler</span>
+                        {% elif r.never_run %}
+                            <span class="badge bg-danger">Nunca corrido</span>
+                        {% elif r.is_stale %}
+                            <span class="badge bg-danger">Atrasado</span>
+                        {% else %}
+                            <span class="badge bg-success">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<p class="text-muted small mt-2">O limiar de "atrasado" é configurável nas Definições deste perfil ("CHECKDB atrasado acima de"). A app nunca executa o CHECKDB — isso deve continuar agendado como job do SQL Agent; esta página só te avisa se esse job parou de correr ou nunca existiu.</p>
+{% endif %}
+
+{% endif %}
+{% endblock %}

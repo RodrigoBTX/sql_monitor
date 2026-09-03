@@ -417,7 +417,7 @@
                             href="{{ url_for('trends.index') }}">Tendências</a></li>
                     <li class="nav-item dropdown">
                         {% set health_eps = ['monitoring.backups', 'monitoring.capacity', 'monitoring.index_health',
-                        'monitoring.deadlocks'] %}
+                        'monitoring.deadlocks', 'monitoring.integrity'] %}
                         <a class="nav-link dropdown-toggle {{ 'active' if ep in health_eps }}" href="#" role="button"
                             data-bs-toggle="dropdown">Saúde da instância</a>
                         <ul class="dropdown-menu">
@@ -427,9 +427,11 @@
                                         class="bi bi-speedometer2 me-1"></i> Capacidade (waits/disco/memória/I-O)</a>
                             </li>
                             <li><a class="dropdown-item" href="{{ url_for('monitoring.index_health') }}"><i
-                                        class="bi bi-diagram-3 me-1"></i> Índices</a></li>
+                                        class="bi bi-diagram-3 me-1"></i> Índices e estatísticas</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('monitoring.deadlocks') }}"><i
                                         class="bi bi-exclamation-octagon me-1"></i> Deadlocks</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.integrity') }}"><i
+                                        class="bi bi-shield-check me-1"></i> Integridade</a></li>
                         </ul>
                     </li>
                 </ul>

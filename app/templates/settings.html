@@ -268,6 +268,13 @@
                             <div class="form-text">Só tem efeito se este for o perfil principal para histórico. É
                                 preciso reiniciar a app para o valor ter efeito.</div>
                         </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label small">CHECKDB "atrasado" acima de (dias)</label>
+                            <input type="number" name="checkdb_stale_days" class="form-control"
+                                value="{{ conn.checkdb_stale_days if conn and conn.checkdb_stale_days else 7 }}">
+                            <div class="form-text">Ver página "Integridade" — a app só lê a data do último CHECKDB
+                                conhecido, não o executa.</div>
+                        </div>
                     </div>
 
                     <hr class="my-4">

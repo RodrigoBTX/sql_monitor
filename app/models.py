@@ -106,6 +106,7 @@ class SqlConnection(db.Model):
     disk_low_pct = db.Column(db.Integer, default=15)
     backup_stale_days = db.Column(db.Integer, default=7)
     snapshot_interval_minutes = db.Column(db.Integer, default=15)
+    checkdb_stale_days = db.Column(db.Integer, default=7)
 
     @property
     def password(self):

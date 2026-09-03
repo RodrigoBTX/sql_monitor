@@ -69,6 +69,7 @@ def _migrate_sqlite_schema(engine):
             "disk_low_pct": "INTEGER DEFAULT 15",
             "backup_stale_days": "INTEGER DEFAULT 7",
             "snapshot_interval_minutes": "INTEGER DEFAULT 15",
+            "checkdb_stale_days": "INTEGER DEFAULT 7",
         },
         "custom_check": {
             "comparison": "VARCHAR(5) DEFAULT 'gt'",
