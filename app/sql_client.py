@@ -712,25 +712,79 @@ def get_index_fragmentation(
 # ---------------------------------------------------------------------------
 
 DEADLOCKS_QUERY = """
+;WITH xevents AS (
+    SELECT
+        xed.value('@timestamp', 'datetime2') AS event_time,
+        xed.query('.') AS event_xml
+    FROM (
+        SELECT CAST(target_data AS XML) AS target_data
+        FROM sys.dm_xe_session_targets st
+        JOIN sys.dm_xe_sessions s ON s.address = st.event_session_address
+        WHERE s.name = 'system_health' AND st.target_name = 'ring_buffer'
+    ) AS t
+    CROSS APPLY t.target_data.nodes('RingBufferTarget/event[@name="xml_deadlock_report"]') AS x(xed)
+)
 SELECT TOP 20
-    xed.value('@timestamp', 'datetime2') AS event_time,
-    xed.value('(deadlock/victim-list/victimProcess/@id)[1]', 'nvarchar(100)') AS victim_process_id
-FROM (
-    SELECT CAST(target_data AS XML) AS target_data
-    FROM sys.dm_xe_session_targets st
-    JOIN sys.dm_xe_sessions s ON s.address = st.event_session_address
-    WHERE s.name = 'system_health' AND st.target_name = 'ring_buffer'
-) AS t
-CROSS APPLY t.target_data.nodes('RingBufferTarget/event[@name="xml_deadlock_report"]') AS x(xed)
-ORDER BY event_time DESC;
+    x.event_time,
+    dl.value('(victim-list/victimProcess/@id)[1]', 'nvarchar(100)') AS victim_process_id,
+    CAST(dl.query('.') AS NVARCHAR(MAX)) AS deadlock_xml
+FROM xevents x
+-- "//deadlock" (em vez de um caminho fixo tipo data[@name=...]/value/deadlock)
+-- procura o elemento <deadlock> em qualquer profundidade dentro do evento —
+-- mais robusto a pequenas diferenças na estrutura do XML entre versões do
+-- SQL Server do que assumir um caminho exato.
+CROSS APPLY x.event_xml.nodes('//deadlock') AS d(dl)
+ORDER BY x.event_time DESC;
 """
+
+
+def _parse_deadlock_processes(deadlock_xml, victim_id):
+    """Lê o grafo do deadlock (XML) e devolve um resumo de cada processo
+    envolvido — SPID, login, aplicação, o que estava a correr, e se foi a
+    vítima escolhida pelo SQL Server para terminar. Se o XML vier
+    vazio/num formato inesperado, devolve uma lista vazia em vez de
+    rebentar — o XML completo continua sempre disponível à parte (botão
+    "Ver XML completo"), para abrires no SSMS como .xdl se precisares do
+    grafo visual."""
+    if not deadlock_xml:
+        return []
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.fromstring(deadlock_xml)
+    except ET.ParseError:
+        return []
+    processes = []
+    for proc in root.findall(".//process"):
+        inputbuf = (proc.findtext("inputbuf") or "").strip()
+        processes.append(
+            {
+                "process_id": proc.get("id"),
+                "spid": proc.get("spid"),
+                "login": proc.get("loginname"),
+                "hostname": proc.get("hostname"),
+                "program": proc.get("clientapp"),
+                "isolation_level": proc.get("isolationlevel"),
+                "wait_resource": proc.get("waitresource"),
+                "query_text": inputbuf,
+                "is_victim": proc.get("id") == victim_id,
+            }
+        )
+    return processes
 
 
 def get_recent_deadlocks(conn: SqlConnection):
     """Lê a extended event 'system_health' (que corre sempre por omissão) à
     procura de relatórios de deadlock recentes — não precisa de nenhuma
-    configuração extra na instância."""
-    return run_query(conn, DEADLOCKS_QUERY, database="master")
+    configuração extra na instância. Para cada evento, devolve também o
+    XML completo do deadlock graph e um resumo já interpretado de cada
+    processo envolvido (login, aplicação, query, vítima ou não)."""
+    rows = run_query(conn, DEADLOCKS_QUERY, database="master")
+    for r in rows:
+        r["processes"] = _parse_deadlock_processes(
+            r.get("deadlock_xml"), r.get("victim_process_id")
+        )
+    return rows
 
 
 # ---------------------------------------------------------------------------

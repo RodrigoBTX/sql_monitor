@@ -167,9 +167,11 @@ principal.
 ## Exportar para CSV
 
 Nas tabelas principais (Jobs, Sessões, Queries, Backups, Índices,
-Estatísticas, Deadlocks, Capacidade, Integridade) há um botão para
-exportar os dados visíveis para `.csv`, para abrires no Excel ou
-partilhares.
+Estatísticas, Capacidade, Integridade) há um botão para exportar os
+dados visíveis para `.csv`, para abrires no Excel ou partilhares. A
+página de Deadlocks não tem exportação — os dados de cada evento (vários
+processos por deadlock) não se resumem bem numa única linha de tabela;
+usa antes o botão "Ver XML completo" de cada evento.
 
 ## Esqueci-me da password de acesso à app
 
